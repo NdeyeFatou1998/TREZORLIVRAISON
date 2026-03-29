@@ -1,9 +1,19 @@
+import 'dart:io' show Platform;
+
+import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:developer' as dev;
 
+import 'api_client.dart';
+import '../firebase_options.dart';
+
 /// Service de gestion des notifications push Firebase.
-/// Gère les notifications de livraisons (assignées, annulées, terminées).
+/// Gère les notifications de livraisons et le rafraîchissement du profil (ex. période d'essai).
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -11,14 +21,30 @@ class NotificationService {
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-  
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
+
+  Future<void> Function()? _onRefreshProfil;
+
+  /// Enregistré depuis [main] pour appeler [AuthProvider.refreshProfile] sans [BuildContext].
+  void setOnRefreshProfil(Future<void> Function()? callback) {
+    _onRefreshProfil = callback;
+  }
 
   /// Initialise Firebase Messaging et les notifications locales.
   Future<void> initialize() async {
     try {
-      // Demander permission notifications
+      // Android 13+ : POST_NOTIFICATIONS (indispensable pour afficher les push)
+      if (!kIsWeb && Platform.isAndroid) {
+        final status = await Permission.notification.status;
+        if (!status.isGranted) {
+          final req = await Permission.notification.request();
+          dev.log('[Notifications] Permission.notification Android: $req');
+        }
+      }
+
       final settings = await _fcm.requestPermission(
         alert: true,
         badge: true,
@@ -26,36 +52,44 @@ class NotificationService {
         provisional: false,
       );
 
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        dev.log('[Notifications] Permission accordée');
-        
-        // Récupérer le token FCM
-        _fcmToken = await _fcm.getToken();
-        dev.log('[Notifications] FCM Token: $_fcmToken');
+      final ok = settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
 
-        // Initialiser notifications locales
+      if (ok) {
+        dev.log('[Notifications] Permission FCM: ${settings.authorizationStatus}');
+
+        _fcmToken = await _fcm.getToken();
+        if (_fcmToken == null || _fcmToken!.isEmpty) {
+          dev.log(
+            '[Notifications] Aucun token FCM — ajoutez android/app/google-services.json et ios/Runner/GoogleService-Info.plist '
+            '(même projet Firebase que le backend) puis relancez l’app.',
+          );
+          return;
+        }
+        dev.log('[Notifications] FCM Token (préfixe): ${_fcmToken!.substring(0, _fcmToken!.length > 24 ? 24 : _fcmToken!.length)}…');
+
+        _fcm.onTokenRefresh.listen((newToken) async {
+          _fcmToken = newToken;
+          await sendTokenToBackend(newToken);
+        });
+
         await _initLocalNotifications();
 
-        // Écouter les messages en foreground
-        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+        FirebaseMessaging.onMessage.listen((m) async => _handleForegroundMessage(m));
+        FirebaseMessaging.onMessageOpenedApp.listen((m) async => _handleNotificationClick(m));
 
-        // Écouter les clics sur notifications
-        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationClick);
-
-        // Vérifier si l'app a été ouverte via une notification
         final initialMessage = await _fcm.getInitialMessage();
         if (initialMessage != null) {
-          _handleNotificationClick(initialMessage);
+          await _handleNotificationClick(initialMessage);
         }
       } else {
-        dev.log('[Notifications] Permission refusée');
+        dev.log('[Notifications] Permission notifications refusée — activez-les dans les réglages du téléphone pour recevoir les push.');
       }
     } catch (e) {
       dev.log('[Notifications] Erreur initialisation: $e');
     }
   }
 
-  /// Initialise les notifications locales (Android/iOS).
   Future<void> _initLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -63,7 +97,7 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    
+
     const settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
@@ -73,15 +107,13 @@ class NotificationService {
       settings,
       onDidReceiveNotificationResponse: (details) {
         dev.log('[Notifications] Clic local: ${details.payload}');
-        // TODO: Navigation vers l'écran approprié
       },
     );
   }
 
-  /// Gère les messages reçus en foreground (app ouverte).
-  void _handleForegroundMessage(RemoteMessage message) {
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
     dev.log('[Notifications] Message foreground: ${message.notification?.title}');
-    
+
     final notification = message.notification;
     final data = message.data;
 
@@ -93,11 +125,9 @@ class NotificationService {
       );
     }
 
-    // Traiter selon le type de notification
-    _handleNotificationData(data);
+    await _handleNotificationData(data);
   }
 
-  /// Affiche une notification locale.
   Future<void> _showLocalNotification({
     required String title,
     required String body,
@@ -135,57 +165,96 @@ class NotificationService {
     );
   }
 
-  /// Gère le clic sur une notification.
-  void _handleNotificationClick(RemoteMessage message) {
+  Future<void> _handleNotificationClick(RemoteMessage message) async {
     dev.log('[Notifications] Clic notification: ${message.data}');
-    _handleNotificationData(message.data);
+    await _handleNotificationData(message.data);
   }
 
-  /// Traite les données de notification selon le type.
-  void _handleNotificationData(Map<String, dynamic> data) {
-    final type = data['type'];
-    
+  Future<void> _handleNotificationData(Map<String, dynamic> data) async {
+    final type = data['type']?.toString();
+
     switch (type) {
+      case 'PERIODE_ESSAI_ACCORDEE':
+      case 'REFRESH_LIVREUR_PROFIL':
+        dev.log('[Notifications] Rafraîchissement profil (type=$type)');
+        await _onRefreshProfil?.call();
+        break;
+
       case 'NOUVELLE_LIVRAISON':
         dev.log('[Notifications] Nouvelle livraison disponible: ${data['livraisonId']}');
-        // TODO: Rafraîchir la liste des livraisons disponibles
         break;
-        
+
       case 'LIVRAISON_ASSIGNEE':
         dev.log('[Notifications] Livraison assignée: ${data['livraisonId']}');
-        // TODO: Rafraîchir la liste des livraisons actives
         break;
-        
+
       case 'LIVRAISON_ANNULEE':
         dev.log('[Notifications] Livraison annulée: ${data['livraisonId']}');
-        // TODO: Rafraîchir et afficher message
         break;
-        
+
       case 'LIVRAISON_TERMINEE':
         dev.log('[Notifications] Livraison terminée: ${data['livraisonId']}');
-        // TODO: Rafraîchir historique
         break;
-        
+
       default:
-        dev.log('[Notifications] Type inconnu: $type');
+        dev.log('[Notifications] Type inconnu ou vide: $type');
     }
   }
 
-  /// Envoie le token FCM au backend.
+  /// Enregistre le token FCM côté backend (JWT livreur requis).
   Future<void> sendTokenToBackend(String token) async {
-    // TODO: Implémenter l'envoi du token au backend
-    dev.log('[Notifications] Envoi token au backend: $token');
+    try {
+      final api = ApiClient();
+      final r = await api.put(
+        '/api/livreur/fcm-token',
+        data: {'fcmToken': token},
+        options: Options(validateStatus: (s) => s != null && s < 600),
+      );
+      if (r.statusCode == 200 && r.data is Map && r.data['success'] == true) {
+        dev.log('[Notifications] Token FCM enregistré côté serveur');
+      } else {
+        dev.log(
+          '[Notifications] FCM token HTTP ${r.statusCode}: ${r.data}',
+        );
+      }
+    } on DioException catch (e) {
+      dev.log(
+        '[Notifications] Envoi token échoué: ${e.response?.statusCode} — ${e.response?.data}',
+      );
+    } catch (e) {
+      dev.log('[Notifications] Envoi token erreur: $e');
+    }
   }
 
-  /// Supprime le token FCM du backend (déconnexion).
+  /// Retire le token côté serveur (déconnexion).
   Future<void> deleteTokenFromBackend() async {
-    // TODO: Implémenter la suppression du token
-    dev.log('[Notifications] Suppression token du backend');
+    try {
+      final api = ApiClient();
+      await api.put(
+        '/api/livreur/fcm-token',
+        data: {'fcmToken': ''},
+        options: Options(validateStatus: (s) => s != null && s < 600),
+      );
+    } on DioException catch (e) {
+      dev.log('[Notifications] Suppression token: ${e.response?.statusCode} — ${e.response?.data}');
+    } catch (e) {
+      dev.log('[Notifications] Suppression token erreur: $e');
+    }
+  }
+
+  /// Après connexion ou au démarrage si une session existe.
+  Future<void> syncFcmTokenToBackendIfLoggedIn() async {
+    final jwt = await _storage.read(key: 'livreur_token');
+    if (jwt == null || jwt.isEmpty) return;
+    final token = _fcmToken ?? await _fcm.getToken();
+    if (token == null || token.isEmpty) return;
+    await sendTokenToBackend(token);
   }
 }
 
-/// Handler pour les messages en background (app fermée/arrière-plan).
+/// Handler pour les messages en background (app fermée / arrière-plan).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  dev.log('[Notifications] Message background: ${message.notification?.title}');
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  dev.log('[Notifications] Message background: ${message.notification?.title} data=${message.data}');
 }

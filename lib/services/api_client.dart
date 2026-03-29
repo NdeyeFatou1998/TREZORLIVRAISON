@@ -54,9 +54,9 @@ class ApiClient {
     return _dio.post(path, data: data);
   }
 
-  Future<Response> put(String path, {dynamic data}) async {
+  Future<Response> put(String path, {dynamic data, Options? options}) async {
     await init();
-    return _dio.put(path, data: data);
+    return _dio.put(path, data: data, options: options);
   }
 
   Future<Response> delete(String path, {Map<String, dynamic>? queryParameters}) async {
