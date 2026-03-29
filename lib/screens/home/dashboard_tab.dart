@@ -29,12 +29,21 @@ class _DashboardTabState extends State<DashboardTab> {
   void initState() {
     super.initState();
     _loadActives();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AuthProvider>().refreshProfile();
+    });
   }
 
   Future<void> _loadActives() async {
     setState(() => _isLoading = true);
     _actives = await _livraisonService.getLivraisonsActives();
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _refreshAll() async {
+    await context.read<AuthProvider>().refreshProfile();
+    await _loadActives();
   }
 
   /// Toggle disponibilité avec feedback visuel immédiat
@@ -80,7 +89,7 @@ class _DashboardTabState extends State<DashboardTab> {
   bool _peutEtreDisponible() {
     final livreur = context.read<AuthProvider>().livreur;
     if (livreur == null) return false;
-    return livreur.peutEtreDisponible;
+    return livreur.effectivePeutEtreDisponible;
   }
 
   @override
@@ -99,7 +108,7 @@ class _DashboardTabState extends State<DashboardTab> {
     return Scaffold(
       backgroundColor: bgColor,
       body: RefreshIndicator(
-        onRefresh: _loadActives,
+        onRefresh: _refreshAll,
         color: AppColors.gold,
         child: ListView(
           padding: EdgeInsets.zero,
@@ -281,7 +290,7 @@ class _DashboardTabState extends State<DashboardTab> {
     }
     // 2. Période d'essai admin active
     if (livreur?.periodeEssaiActive == true) {
-      final jours = livreur.joursEssaiRestants as int;
+      final jours = livreur!.joursEssaiRestants;
       return Text('Période d\'essai: $jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''}',
           style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13, fontWeight: FontWeight.w600));
     }

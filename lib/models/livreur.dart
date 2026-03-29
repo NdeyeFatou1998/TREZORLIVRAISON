@@ -54,6 +54,22 @@ class LivreurModel {
     this.peutEtreDisponible = false,
   });
 
+  static int _parseInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  /// JSON / Dio peuvent renvoyer bool, int (0/1) ou string — le backend envoie bien un bool.
+  static bool _parseBool(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    final s = v.toString().toLowerCase();
+    return s == 'true' || s == '1';
+  }
+
   factory LivreurModel.fromJson(Map<String, dynamic> json) => LivreurModel(
         id: json['id']?.toString() ?? '',
         prenom: json['prenom']?.toString() ?? '',
@@ -62,8 +78,8 @@ class LivreurModel {
         phone: json['phone']?.toString() ?? '',
         typeEngin: json['typeEngin']?.toString(),
         statut: json['statut']?.toString() ?? 'EN_ATTENTE_VALIDATION',
-        disponible: json['disponible'] as bool? ?? false,
-        abonnementActif: json['abonnementActif'] as bool? ?? false,
+        disponible: _parseBool(json['disponible']),
+        abonnementActif: _parseBool(json['abonnementActif']),
         dateAbonnementExpiration: json['dateAbonnementExpiration']?.toString(),
         numeroCin: json['numeroCin']?.toString(),
         photoCinRecto: json['photoCinRecto']?.toString(),
@@ -72,11 +88,11 @@ class LivreurModel {
         photoEngin: json['photoEngin']?.toString(),
         notesAdmin: json['notesAdmin']?.toString(),
         createdAt: json['createdAt']?.toString(),
-        joursEssaiAccordes: (json['joursEssaiAccordes'] as num?)?.toInt() ?? 0,
-        joursEssaiRestants: (json['joursEssaiRestants'] as num?)?.toInt() ?? 0,
+        joursEssaiAccordes: _parseInt(json['joursEssaiAccordes']),
+        joursEssaiRestants: _parseInt(json['joursEssaiRestants']),
         dateDebutEssai: json['dateDebutEssai']?.toString(),
-        periodeEssaiActive: json['periodeEssaiActive'] as bool? ?? false,
-        peutEtreDisponible: json['peutEtreDisponible'] as bool? ?? false,
+        periodeEssaiActive: _parseBool(json['periodeEssaiActive']),
+        peutEtreDisponible: _parseBool(json['peutEtreDisponible']),
       );
 
   /// Nom complet du livreur
@@ -84,6 +100,10 @@ class LivreurModel {
 
   /// Vérifie si le compte est validé
   bool get isValide => statut == 'VALIDE';
+
+  /// Aligné backend : abonnement OU essai actif (secours si un bool JSON était mal parsé).
+  bool get effectivePeutEtreDisponible =>
+      abonnementActif || periodeEssaiActive || peutEtreDisponible;
 
   /// Copie avec modification de certains champs
   LivreurModel copyWith({bool? disponible, bool? abonnementActif, String? statut,

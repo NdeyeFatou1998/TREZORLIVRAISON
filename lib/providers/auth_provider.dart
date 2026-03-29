@@ -75,6 +75,8 @@ class AuthProvider extends ChangeNotifier {
       _livreur = await _authService.login(email, password);
       AppLogger.log('[Auth] login OK: ${_livreur?.fullName}, email=${_livreur?.email}');
       AppLogger.log('[Auth] login data: photoSelfie=${_livreur?.photoSelfie != null}, numeroCin=${_livreur?.numeroCin}');
+      // Recharger le profil complet (essai admin, peutEtreDisponible) — même source que le dashboard
+      await refreshProfile();
       _isLoading = false;
       notifyListeners();
       return true;
