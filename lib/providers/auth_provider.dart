@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/livreur.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import '../utils/app_logger.dart';
 
 /// Provider d'authentification du livreur.
@@ -77,6 +78,7 @@ class AuthProvider extends ChangeNotifier {
       AppLogger.log('[Auth] login data: photoSelfie=${_livreur?.photoSelfie != null}, numeroCin=${_livreur?.numeroCin}');
       // Recharger le profil complet (essai admin, peutEtreDisponible) — même source que le dashboard
       await refreshProfile();
+      await NotificationService().syncFcmTokenToBackendIfLoggedIn();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -91,6 +93,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Déconnexion.
   Future<void> logout() async {
+    await NotificationService().deleteTokenFromBackend();
     await _authService.logout();
     _livreur = null;
     notifyListeners();

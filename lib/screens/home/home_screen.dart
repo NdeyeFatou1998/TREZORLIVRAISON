@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/auth_provider.dart' show AuthProvider;
 import '../../theme/app_theme.dart';
+import '../../services/api_client.dart';
+import '../../services/location_service.dart';
+import '../../utils/app_logger.dart';
 import 'dashboard_tab.dart';
 import 'history_tab.dart';
 import 'profile_tab.dart';
+import 'carte_livreurs_tab.dart';
 
 /// Écran principal avec navigation par onglets (BottomNavigationBar).
 /// 3 onglets : Dashboard | Historique | Profil
@@ -17,6 +22,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  Timer? _positionHeartbeat;
+  bool _authListenerAttached = false;
+  AuthProvider? _authProvider;
+  final ApiClient _api = ApiClient();
+  final LocationService _locationService = LocationService();
 
   @override
   void initState() {
@@ -25,7 +35,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _authProvider ??= context.read<AuthProvider>();
+    if (!_authListenerAttached) {
+      _authListenerAttached = true;
+      _authProvider!.addListener(_onAuthOrDisponibiliteChanged);
+      _onAuthOrDisponibiliteChanged();
+    }
+  }
+
+  void _onAuthOrDisponibiliteChanged() {
+    _positionHeartbeat?.cancel();
+    _positionHeartbeat = null;
+    final livreur = _authProvider?.livreur;
+    if (livreur == null || !livreur.disponible) {
+      AppLogger.log('[Home] Heartbeat position: arrêt (hors ligne)');
+      return;
+    }
+    AppLogger.log('[Home] Heartbeat position: toutes les 10 s');
+    _sendPositionOnce();
+    _positionHeartbeat = Timer.periodic(const Duration(seconds: 10), (_) => _sendPositionOnce());
+  }
+
+  Future<void> _sendPositionOnce() async {
+    final pos = await _locationService.getCurrentPosition();
+    if (pos == null) return;
+    try {
+      await _api.put('/api/livreur/position', data: {
+        'latitude': pos.latitude,
+        'longitude': pos.longitude,
+      });
+    } catch (e) {
+      AppLogger.error('[Home] PUT position', e);
+    }
+  }
+
+  @override
   void dispose() {
+    _positionHeartbeat?.cancel();
+    if (_authListenerAttached) {
+      _authProvider?.removeListener(_onAuthOrDisponibiliteChanged);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -39,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   final List<Widget> _tabs = const [
     DashboardTab(),
+    CarteLivreursTab(),
     HistoryTab(),
     ProfileTab(),
   ];
@@ -64,6 +116,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map),
+            label: 'Carte',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.history_outlined),

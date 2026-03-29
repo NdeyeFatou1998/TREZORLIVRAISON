@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "848735335993",
+    "project_id": "trezorandroid",
+    "storage_bucket": "trezorandroid.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:848735335993:android:68e3cc25fd8ac1b515ffe8",
+        "android_client_info": {
+          "package_name": "com.trezor.trezorlivraison"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9GTW2arCohP5IOAt9ZSovTRqrf9Zvhsc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
