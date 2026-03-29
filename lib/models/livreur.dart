@@ -18,6 +18,16 @@ class LivreurModel {
   final String? photoEngin;
   final String? notesAdmin;
   final String? createdAt;
+  /// Nombre de jours d'essai accordés par l'admin
+  final int joursEssaiAccordes;
+  /// Nombre de jours d'essai restants (calculé par le backend)
+  final int joursEssaiRestants;
+  /// Date de début de la période d'essai
+  final String? dateDebutEssai;
+  /// Période d'essai active (calculé par le backend)
+  final bool periodeEssaiActive;
+  /// Peut activer la disponibilité (abonnement actif OU essai actif)
+  final bool peutEtreDisponible;
 
   const LivreurModel({
     required this.id,
@@ -37,6 +47,11 @@ class LivreurModel {
     this.photoEngin,
     this.notesAdmin,
     this.createdAt,
+    this.joursEssaiAccordes = 0,
+    this.joursEssaiRestants = 0,
+    this.dateDebutEssai,
+    this.periodeEssaiActive = false,
+    this.peutEtreDisponible = false,
   });
 
   factory LivreurModel.fromJson(Map<String, dynamic> json) => LivreurModel(
@@ -57,6 +72,11 @@ class LivreurModel {
         photoEngin: json['photoEngin']?.toString(),
         notesAdmin: json['notesAdmin']?.toString(),
         createdAt: json['createdAt']?.toString(),
+        joursEssaiAccordes: (json['joursEssaiAccordes'] as num?)?.toInt() ?? 0,
+        joursEssaiRestants: (json['joursEssaiRestants'] as num?)?.toInt() ?? 0,
+        dateDebutEssai: json['dateDebutEssai']?.toString(),
+        periodeEssaiActive: json['periodeEssaiActive'] as bool? ?? false,
+        peutEtreDisponible: json['peutEtreDisponible'] as bool? ?? false,
       );
 
   /// Nom complet du livreur
@@ -66,7 +86,8 @@ class LivreurModel {
   bool get isValide => statut == 'VALIDE';
 
   /// Copie avec modification de certains champs
-  LivreurModel copyWith({bool? disponible, bool? abonnementActif, String? statut}) => LivreurModel(
+  LivreurModel copyWith({bool? disponible, bool? abonnementActif, String? statut,
+      bool? peutEtreDisponible, bool? periodeEssaiActive, int? joursEssaiRestants}) => LivreurModel(
         id: id, prenom: prenom, nom: nom, email: email, phone: phone,
         typeEngin: typeEngin, statut: statut ?? this.statut,
         disponible: disponible ?? this.disponible,
@@ -76,5 +97,10 @@ class LivreurModel {
         photoCinVerso: photoCinVerso, photoSelfie: photoSelfie,
         photoEngin: photoEngin, notesAdmin: notesAdmin,
         createdAt: createdAt,
+        joursEssaiAccordes: joursEssaiAccordes,
+        joursEssaiRestants: joursEssaiRestants ?? this.joursEssaiRestants,
+        dateDebutEssai: dateDebutEssai,
+        periodeEssaiActive: periodeEssaiActive ?? this.periodeEssaiActive,
+        peutEtreDisponible: peutEtreDisponible ?? this.peutEtreDisponible,
       );
 }

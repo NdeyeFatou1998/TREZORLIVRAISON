@@ -76,18 +76,11 @@ class _DashboardTabState extends State<DashboardTab> {
     }
   }
 
-  /// Vérifie si abonnement actif ou en période d'essai (3 jours)
-  bool _estAbonnementActifOuEssai() {
+  /// Vérifie si le livreur peut utiliser la disponibilité (abonnement OU essai admin)
+  bool _peutEtreDisponible() {
     final livreur = context.read<AuthProvider>().livreur;
     if (livreur == null) return false;
-    if (livreur.abonnementActif) return true;
-    if (livreur.createdAt == null) return false;
-    try {
-      final dateCreation = DateTime.parse(livreur.createdAt!);
-      return DateTime.now().isBefore(dateCreation.add(const Duration(days: 3)));
-    } catch (_) {
-      return false;
-    }
+    return livreur.peutEtreDisponible;
   }
 
   @override
@@ -156,9 +149,9 @@ class _DashboardTabState extends State<DashboardTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Alerte abonnement expiré ──
-                  if (!_estAbonnementActifOuEssai()) ...[
-                    _buildMessageAbonnementExpire(),
+                  // ── Alerte si ni abonnement ni essai actif ──
+                  if (!_peutEtreDisponible()) ...[
+                    _buildAlertePasAcces(livreur),
                     const SizedBox(height: 12),
                   ],
 
@@ -189,19 +182,25 @@ class _DashboardTabState extends State<DashboardTab> {
     );
   }
 
-  /// Card toggle disponibilité avec GestureDetector comme fallback
+  /// Card toggle disponibilité — grisé si pas d'abonnement ni d'essai actif
   Widget _buildDisponibiliteCard(bool disponible, Color cardColor, Color textColor) {
+    final canToggle = _peutEtreDisponible();
+
     return GestureDetector(
-      onTap: _togglingDisponibilite ? null : _toggleDisponibilite,
+      onTap: (canToggle && !_togglingDisponibilite) ? _toggleDisponibilite : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: disponible ? Colors.green.withValues(alpha: 0.1) : cardColor,
+          color: !canToggle
+              ? Colors.grey.shade200.withValues(alpha: 0.3)
+              : disponible ? Colors.green.withValues(alpha: 0.1) : cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-              color: disponible ? Colors.green : Colors.grey.shade400,
-              width: disponible ? 2 : 1),
+              color: !canToggle
+                  ? Colors.grey.shade300
+                  : disponible ? Colors.green : Colors.grey.shade400,
+              width: disponible && canToggle ? 2 : 1),
         ),
         child: Row(
           children: [
@@ -210,35 +209,47 @@ class _DashboardTabState extends State<DashboardTab> {
               duration: const Duration(milliseconds: 300),
               width: 48, height: 48,
               decoration: BoxDecoration(
-                color: disponible ? Colors.green : Colors.grey,
+                color: !canToggle ? Colors.grey.shade400 : disponible ? Colors.green : Colors.grey,
                 shape: BoxShape.circle,
               ),
-              child: Icon(disponible ? Icons.wifi : Icons.wifi_off, color: Colors.white, size: 24),
+              child: Icon(
+                !canToggle ? Icons.lock_outline : disponible ? Icons.wifi : Icons.wifi_off,
+                color: Colors.white, size: 24,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(disponible ? 'En ligne' : 'Hors ligne',
-                      style: TextStyle(color: disponible ? Colors.green : textColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(disponible
-                      ? 'Vous recevez des propositions de livraison'
-                      : 'Appuyez pour recevoir des livraisons',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Text(
+                    !canToggle ? 'Indisponible' : disponible ? 'En ligne' : 'Hors ligne',
+                    style: TextStyle(
+                      color: !canToggle ? Colors.grey : disponible ? Colors.green : textColor,
+                      fontWeight: FontWeight.bold, fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    !canToggle
+                        ? 'Abonnement ou essai requis'
+                        : disponible
+                            ? 'Vous recevez des propositions de livraison'
+                            : 'Appuyez pour recevoir des livraisons',
+                    style: TextStyle(color: !canToggle ? Colors.red.shade300 : Colors.grey, fontSize: 12),
+                  ),
                 ],
               ),
             ),
-            // Switch Material avec thumbColor et trackColor Material States
+            // Switch — grisé et désactivé si pas autorisé
             _togglingDisponibilite
                 ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold))
                 : Switch(
-                    value: disponible,
-                    onChanged: (_) => _toggleDisponibilite(),
+                    value: canToggle ? disponible : false,
+                    onChanged: canToggle ? (_) => _toggleDisponibilite() : null,
                     activeThumbColor: Colors.white,
                     activeTrackColor: Colors.green,
-                    inactiveThumbColor: Colors.white,
-                    inactiveTrackColor: Colors.grey.shade400,
+                    inactiveThumbColor: canToggle ? Colors.white : Colors.grey.shade300,
+                    inactiveTrackColor: canToggle ? Colors.grey.shade400 : Colors.grey.shade300,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
           ],
@@ -262,41 +273,67 @@ class _DashboardTabState extends State<DashboardTab> {
     );
   }
 
-  /// Statut abonnement affiché dans le header
+  /// Statut abonnement/essai affiché dans le header
   Widget _buildStatutAbonnement(dynamic livreur) {
+    // 1. Abonnement actif → priorité
     if (livreur?.abonnementActif == true) {
-      return const Text('✅ Abonnement actif', style: TextStyle(color: AppColors.gold, fontSize: 13, fontWeight: FontWeight.w600));
+      return const Text('Abonnement actif', style: TextStyle(color: AppColors.gold, fontSize: 13, fontWeight: FontWeight.w600));
     }
-    if (livreur?.createdAt != null) {
-      try {
-        final dateCreation = DateTime.parse(livreur.createdAt);
-        final finEssai = dateCreation.add(const Duration(days: 3));
-        if (DateTime.now().isBefore(finEssai)) {
-          final joursRestants = finEssai.difference(DateTime.now()).inDays;
-          return Text('🎁 Période d\'essai: $joursRestants jour${joursRestants > 1 ? 's' : ''} restant${joursRestants > 1 ? 's' : ''}',
-              style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13, fontWeight: FontWeight.w600));
-        }
-      } catch (_) {}
+    // 2. Période d'essai admin active
+    if (livreur?.periodeEssaiActive == true) {
+      final jours = livreur.joursEssaiRestants as int;
+      return Text('Période d\'essai: $jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''}',
+          style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13, fontWeight: FontWeight.w600));
     }
-    return const Text('⚠️ Abonnement expiré', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600));
+    // 3. A déjà eu un abonnement → expiré
+    if (livreur?.dateAbonnementExpiration != null) {
+      return const Text('Abonnement expiré', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600));
+    }
+    // 4. A eu des jours d'essai → expirés
+    if (livreur != null && livreur.joursEssaiAccordes > 0) {
+      return const Text('Période d\'essai terminée (0 jour)', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600));
+    }
+    // 5. Jamais eu d'abonnement ni d'essai
+    return const Text('Aucun abonnement', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600));
   }
 
-  /// Alerte rouge si abonnement expiré
-  Widget _buildMessageAbonnementExpire() {
+  /// Alerte contextuelle si ni abonnement ni essai actif
+  Widget _buildAlertePasAcces(dynamic livreur) {
+    // Déterminer le message contextuel
+    String message;
+    IconData icon;
+    Color color;
+
+    if (livreur?.dateAbonnementExpiration != null && livreur?.abonnementActif != true) {
+      // A eu un abonnement → il a expiré
+      message = 'Votre abonnement a expiré. Renouvelez dans Profil pour continuer à livrer.';
+      icon = Icons.credit_card_off;
+      color = Colors.orange;
+    } else if (livreur != null && livreur.joursEssaiAccordes > 0 && livreur.periodeEssaiActive != true) {
+      // A eu une période d'essai → elle a expiré
+      message = 'Votre période d\'essai est terminée (0 jour restant). Souscrivez à un abonnement pour continuer.';
+      icon = Icons.timer_off;
+      color = Colors.red;
+    } else {
+      // Jamais eu d'abonnement ni d'essai
+      message = 'Aucun abonnement actif. Souscrivez (2 000 FCFA/mois) dans Profil pour accéder aux livraisons.';
+      icon = Icons.warning_amber_rounded;
+      color = Colors.red;
+    }
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+          Icon(icon, color: color, size: 24),
           const SizedBox(width: 10),
           Expanded(
-            child: Text('Votre abonnement a expiré. Allez dans Profil pour renouveler.',
-                style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+            child: Text(message, style: TextStyle(color: color, fontSize: 13)),
           ),
         ],
       ),

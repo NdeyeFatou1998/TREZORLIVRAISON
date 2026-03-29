@@ -116,25 +116,27 @@ class _ProfileTabState extends State<ProfileTab> {
     final textColor = isDark ? AppColors.darkText : AppColors.lightText;
     final secColor = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
-    // Calcul statut abonnement
+    // Calcul statut abonnement / période d'essai admin
     String expirationStr = 'Non abonné';
     bool periodeEssai = false;
 
     if (livreur?.abonnementActif == true && livreur?.dateAbonnementExpiration != null) {
+      // Abonnement actif → afficher date d'expiration
       try {
         final dt = DateTime.parse(livreur!.dateAbonnementExpiration!);
         expirationStr = 'Expire le ${DateFormat('dd/MM/yyyy').format(dt)}';
       } catch (_) {}
-    } else if (livreur?.createdAt != null) {
-      try {
-        final dateCreation = DateTime.parse(livreur!.createdAt!);
-        final finEssai = dateCreation.add(const Duration(days: 3));
-        if (DateTime.now().isBefore(finEssai)) {
-          periodeEssai = true;
-          final jours = finEssai.difference(DateTime.now()).inDays;
-          expirationStr = '$jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''}';
-        }
-      } catch (_) {}
+    } else if (livreur?.periodeEssaiActive == true) {
+      // Période d'essai admin active
+      periodeEssai = true;
+      final jours = livreur!.joursEssaiRestants;
+      expirationStr = '$jours jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''}';
+    } else if (livreur?.dateAbonnementExpiration != null) {
+      // A eu un abonnement → expiré
+      expirationStr = 'Abonnement expiré';
+    } else if (livreur != null && livreur.joursEssaiAccordes > 0) {
+      // A eu une période d'essai → terminée
+      expirationStr = 'Période d\'essai terminée (0 jour)';
     }
 
     return Scaffold(
