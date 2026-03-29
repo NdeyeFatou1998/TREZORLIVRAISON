@@ -21,6 +21,15 @@ class _ProfileTabState extends State<ProfileTab> {
   final ApiClient _api = ApiClient();
   bool _loadingAbonnement = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Recharger le profil complet depuis le backend à chaque ouverture
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().refreshProfile();
+    });
+  }
+
   /// Initie un paiement PayTech pour l'abonnement
   Future<void> _payerAbonnement() async {
     final confirme = await showDialog<bool>(

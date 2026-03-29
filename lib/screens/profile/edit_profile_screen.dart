@@ -24,18 +24,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _phoneCtrl;
   late TextEditingController _typeEnginCtrl;
 
-  /// Données non éditables récupérées du profil
-  LivreurModel? _livreur;
   bool _isLoading = false;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    _livreur = context.read<AuthProvider>().livreur;
-    _prenomCtrl = TextEditingController(text: _livreur?.prenom ?? '');
-    _nomCtrl = TextEditingController(text: _livreur?.nom ?? '');
-    _phoneCtrl = TextEditingController(text: _livreur?.phone ?? '');
-    _typeEnginCtrl = TextEditingController(text: _livreur?.typeEngin ?? '');
+    _prenomCtrl = TextEditingController();
+    _nomCtrl = TextEditingController();
+    _phoneCtrl = TextEditingController();
+    _typeEnginCtrl = TextEditingController();
+    // Déclencher un refresh des données du profil
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initFromProvider();
+      context.read<AuthProvider>().refreshProfile();
+    });
+  }
+
+  /// Initialise les controllers avec les données du provider
+  void _initFromProvider() {
+    final livreur = context.read<AuthProvider>().livreur;
+    if (livreur != null && !_initialized) {
+      _prenomCtrl.text = livreur.prenom;
+      _nomCtrl.text = livreur.nom;
+      _phoneCtrl.text = livreur.phone;
+      _typeEnginCtrl.text = livreur.typeEngin ?? '';
+      _initialized = true;
+    }
   }
 
   @override
@@ -81,6 +96,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Observer le provider pour recevoir les mises à jour du profil
+    final livreur = context.watch<AuthProvider>().livreur;
+    // Initialiser les controllers dès que les données arrivent
+    if (livreur != null && !_initialized) {
+      _prenomCtrl.text = livreur.prenom;
+      _nomCtrl.text = livreur.nom;
+      _phoneCtrl.text = livreur.phone;
+      _typeEnginCtrl.text = livreur.typeEngin ?? '';
+      _initialized = true;
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? AppColors.darkBg : AppColors.lightBg;
     final cardColor = isDark ? AppColors.darkCard : AppColors.lightCard;
@@ -113,10 +139,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildTextField(_typeEnginCtrl, 'Type d\'engin', Icons.two_wheeler_outlined, cardColor, required: false, hint: 'Moto, Vélo, Voiture...'),
               const SizedBox(height: 12),
               // Email (lecture seule)
-              _buildReadOnlyField('Email', _livreur?.email ?? '-', Icons.email_outlined, cardColor, secColor),
+              _buildReadOnlyField('Email', livreur?.email ?? '-', Icons.email_outlined, cardColor, secColor),
               const SizedBox(height: 12),
               // N° CIN (lecture seule)
-              _buildReadOnlyField('N° Pièce d\'identité', _livreur?.numeroCin ?? '-', Icons.badge_outlined, cardColor, secColor),
+              _buildReadOnlyField('N° Pièce d\'identité', livreur?.numeroCin ?? '-', Icons.badge_outlined, cardColor, secColor),
 
               const SizedBox(height: 28),
 
@@ -128,19 +154,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               const SizedBox(height: 14),
 
               // Photo selfie
-              _buildImageCard('Photo selfie', _livreur?.photoSelfie, Icons.face, cardColor, textColor, secColor),
+              _buildImageCard('Photo selfie', livreur?.photoSelfie, Icons.face, cardColor, textColor, secColor),
               const SizedBox(height: 12),
 
               // CIN Recto
-              _buildImageCard('Pièce d\'identité (Recto)', _livreur?.photoCinRecto, Icons.credit_card, cardColor, textColor, secColor),
+              _buildImageCard('Pièce d\'identité (Recto)', livreur?.photoCinRecto, Icons.credit_card, cardColor, textColor, secColor),
               const SizedBox(height: 12),
 
               // CIN Verso
-              _buildImageCard('Pièce d\'identité (Verso)', _livreur?.photoCinVerso, Icons.credit_card, cardColor, textColor, secColor),
+              _buildImageCard('Pièce d\'identité (Verso)', livreur?.photoCinVerso, Icons.credit_card, cardColor, textColor, secColor),
               const SizedBox(height: 12),
 
               // Photo engin
-              _buildImageCard('Photo de l\'engin', _livreur?.photoEngin, Icons.two_wheeler, cardColor, textColor, secColor),
+              _buildImageCard('Photo de l\'engin', livreur?.photoEngin, Icons.two_wheeler, cardColor, textColor, secColor),
 
               const SizedBox(height: 32),
 

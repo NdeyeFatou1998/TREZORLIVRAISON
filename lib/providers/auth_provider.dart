@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../models/livreur.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
+import '../utils/app_logger.dart';
 
 /// Provider d'authentification du livreur.
 /// Centralise l'état de connexion accessible dans toute l'app.
@@ -24,29 +26,43 @@ class AuthProvider extends ChangeNotifier {
   /// Si un token existe, recharge le profil complet depuis le backend.
   Future<bool> checkSession() async {
     final hasToken = await _authService.isLoggedIn();
+    AppLogger.log('[Auth] checkSession: hasToken=$hasToken');
     if (hasToken) {
       // Recharger le profil complet pour avoir toutes les données
       await refreshProfile();
+      AppLogger.log('[Auth] checkSession: livreur=${_livreur?.fullName ?? "NULL"}');
       return _livreur != null;
     }
     return false;
   }
 
   /// Recharge le profil complet du livreur depuis le backend.
-  /// Appel GET /api/livreur/profil pour récupérer toutes les infos.
+  /// Appel GET /api/livreur/profil pour récupérer toutes les infos à jour.
   Future<void> refreshProfile() async {
     try {
       final r = await _api.get('/api/livreur/profil');
       if (r.statusCode == 200 && r.data['success'] == true) {
         final data = r.data['data'] as Map<String, dynamic>;
+        AppLogger.log('[Auth] refreshProfile OK: prenom=${data['prenom']}, nom=${data['nom']}, photoSelfie=${data['photoSelfie'] != null}');
         _livreur = LivreurModel.fromJson(data);
         notifyListeners();
+      } else {
+        AppLogger.error('[Auth] refreshProfile: réponse inattendue', r.data);
       }
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      AppLogger.error('[Auth] refreshProfile DioException: $statusCode', e.message);
+      // Seulement déconnecter si token invalide/expiré (401/403)
+      if (statusCode == 401 || statusCode == 403) {
+        AppLogger.log('[Auth] Token invalide/expiré, déconnexion');
+        await _authService.deleteToken();
+        _livreur = null;
+        notifyListeners();
+      }
+      // Sinon (500, timeout, réseau...) on garde le livreur existant
     } catch (e) {
-      // Si le profil ne peut pas être chargé (token expiré, etc.), déconnecter
-      await _authService.deleteToken();
-      _livreur = null;
-      notifyListeners();
+      AppLogger.error('[Auth] refreshProfile erreur générale', e);
+      // Ne PAS supprimer le token pour les erreurs non-auth
     }
   }
 
@@ -57,11 +73,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _livreur = await _authService.login(email, password);
+      AppLogger.log('[Auth] login OK: ${_livreur?.fullName}, email=${_livreur?.email}');
+      AppLogger.log('[Auth] login data: photoSelfie=${_livreur?.photoSelfie != null}, numeroCin=${_livreur?.numeroCin}');
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString().replaceFirst('Exception: ', '');
+      AppLogger.error('[Auth] login ERREUR', _error);
       _isLoading = false;
       notifyListeners();
       return false;
