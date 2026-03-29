@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart' show Color;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -118,7 +119,7 @@ class NotificationService {
     final data = message.data;
 
     if (notification != null) {
-      _showLocalNotification(
+      await _showLocalNotification(
         title: notification.title ?? 'Trezor Livraison',
         body: notification.body ?? '',
         payload: data['type'] ?? '',
@@ -133,25 +134,38 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'trezor_livraison',
-      'Livraisons',
-      channelDescription: 'Notifications de livraisons',
+    final isCadeauEssai = payload == 'PERIODE_ESSAI_ACCORDEE';
+
+    final androidDetails = AndroidNotificationDetails(
+      isCadeauEssai ? 'trezor_cadeau' : 'trezor_livraison',
+      isCadeauEssai ? 'Cadeaux Trezor' : 'Livraisons',
+      channelDescription: isCadeauEssai
+          ? 'Bonus et essais offerts par Trezor'
+          : 'Notifications de livraisons',
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      sound: RawResourceAndroidNotificationSound('notification'),
+      sound: const RawResourceAndroidNotificationSound('notification'),
       enableVibration: true,
+      color: isCadeauEssai ? const Color(0xFFC9A227) : null,
+      styleInformation: isCadeauEssai
+          ? BigTextStyleInformation(
+              body,
+              contentTitle: 'Trezor',
+              summaryText: 'Cadeau offert',
+            )
+          : null,
     );
 
-    const iosDetails = DarwinNotificationDetails(
+    final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
       sound: 'notification.aiff',
+      subtitle: isCadeauEssai ? 'Offert par Trezor' : null,
     );
 
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
