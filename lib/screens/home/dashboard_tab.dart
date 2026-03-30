@@ -12,10 +12,10 @@ class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
 
   @override
-  State<DashboardTab> createState() => _DashboardTabState();
+  State<DashboardTab> createState() => DashboardTabState();
 }
 
-class _DashboardTabState extends State<DashboardTab> {
+class DashboardTabState extends State<DashboardTab> {
   final LivraisonService _livraisonService = LivraisonService();
   final ApiClient _api = ApiClient();
   final TextEditingController _codeController = TextEditingController();
@@ -24,6 +24,7 @@ class _DashboardTabState extends State<DashboardTab> {
   bool _isLoading = true;
   bool _togglingDisponibilite = false;
   bool _assigningByCode = false;
+  String? _respondingMissionId;
   /// Variable locale pour feedback visuel immédiat du Switch
   bool? _localDisponible;
 
@@ -49,6 +50,9 @@ class _DashboardTabState extends State<DashboardTab> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  /// Appelé depuis [HomeScreen] quand l’onglet Dashboard redevient actif.
+  void refreshActives() => _loadActives();
+
   Future<void> _refreshAll() async {
     await context.read<AuthProvider>().refreshProfile();
     await _loadActives();
@@ -67,9 +71,12 @@ class _DashboardTabState extends State<DashboardTab> {
         const SnackBar(content: Text('Livraison assignée via code ✅'), backgroundColor: Colors.green),
       );
       if (livraison != null) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: livraison)));
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: livraison)),
+        );
       }
-      _loadActives();
+      if (mounted) await _loadActives();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -430,47 +437,162 @@ class _DashboardTabState extends State<DashboardTab> {
     );
   }
 
+  Future<void> _openMission(LivraisonModel l) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: l)),
+    );
+    if (mounted) await _loadActives();
+  }
+
+  Future<void> _accepterProposition(LivraisonModel l) async {
+    if (_respondingMissionId != null) return;
+    setState(() => _respondingMissionId = l.id);
+    try {
+      final updated = await _livraisonService.accepter(l.id);
+      if (!mounted) return;
+      if (updated != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mission acceptée ✅'), backgroundColor: Colors.green),
+        );
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: updated)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _respondingMissionId = null);
+        await _loadActives();
+      }
+    }
+  }
+
+  Future<void> _refuserProposition(LivraisonModel l) async {
+    if (_respondingMissionId != null) return;
+    setState(() => _respondingMissionId = l.id);
+    try {
+      await _livraisonService.refuser(l.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Proposition refusée'), backgroundColor: Colors.orange),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _respondingMissionId = null);
+        await _loadActives();
+      }
+    }
+  }
+
   Widget _buildLivraisonCard(LivraisonModel l, Color cardColor, Color textColor, Color secColor) {
-    return GestureDetector(
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: l))),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.gold.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.local_shipping, color: AppColors.gold),
+    final isProposee = l.statut == 'PROPOSEE';
+    final busy = _respondingMissionId == l.id;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: isProposee ? null : () => _openMission(l),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.gold.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.local_shipping, color: AppColors.gold),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l.articleTitre ?? 'Commande',
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(l.statutLabel, style: const TextStyle(color: AppColors.gold, fontSize: 12)),
+                      if (l.adresseLivraison != null)
+                        Text(
+                          '📍 ${l.adresseLivraison!}',
+                          style: TextStyle(color: secColor, fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                if (!isProposee)
+                  const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l.articleTitre ?? 'Commande', style: TextStyle(
-                      color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  Text(l.statutLabel, style: const TextStyle(color: AppColors.gold, fontSize: 12)),
-                  if (l.adresseLivraison != null)
-                    Text('📍 ${l.adresseLivraison!}',
-                        style: TextStyle(color: secColor, fontSize: 11),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
+          ),
+          if (isProposee) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busy ? null : () => _refuserProposition(l),
+                    child: const Text('Refuser'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: busy ? null : () => _accepterProposition(l),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.deepPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Accepter'),
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
           ],
-        ),
+        ],
       ),
     );
   }

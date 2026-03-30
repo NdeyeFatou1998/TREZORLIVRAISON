@@ -52,6 +52,13 @@ class LivraisonModel {
     this.propositionExpireAt,
   });
 
+  static Map<String, dynamic>? _mapFromJson(dynamic v) {
+    if (v == null) return null;
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    return null;
+  }
+
   factory LivraisonModel.fromJson(Map<String, dynamic> json) => LivraisonModel(
         id: json['id']?.toString() ?? '',
         commandeId: json['commandeId']?.toString() ?? '',
@@ -70,9 +77,9 @@ class LivraisonModel {
         montantLivraison: (json['montantLivraison'] as num?)?.toDouble(),
         dateLivraison: json['dateLivraison']?.toString(),
         createdAt: json['createdAt']?.toString() ?? '',
-        acheteur: json['acheteur'] as Map<String, dynamic>?,
-        vendeur: json['vendeur'] as Map<String, dynamic>?,
-        livreur: json['livreur'] as Map<String, dynamic>?,
+        acheteur: _mapFromJson(json['acheteur']),
+        vendeur: _mapFromJson(json['vendeur']),
+        livreur: _mapFromJson(json['livreur']),
         searchRadiusKm: (json['searchRadiusKm'] as num?)?.toInt(),
         searchStep: (json['searchStep'] as num?)?.toInt(),
         searchMessage: json['searchMessage']?.toString(),

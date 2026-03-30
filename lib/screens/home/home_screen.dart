@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   AuthProvider? _authProvider;
   final ApiClient _api = ApiClient();
   final LocationService _locationService = LocationService();
+  final GlobalKey<DashboardTabState> _dashboardKey = GlobalKey<DashboardTabState>();
 
   @override
   void initState() {
@@ -85,14 +86,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       context.read<AuthProvider>().refreshProfile();
+      _dashboardKey.currentState?.refreshActives();
     }
   }
 
-  final List<Widget> _tabs = const [
-    DashboardTab(),
-    CarteLivreursTab(),
-    HistoryTab(),
-    ProfileTab(),
+  late final List<Widget> _tabs = [
+    DashboardTab(key: _dashboardKey),
+    const CarteLivreursTab(),
+    const HistoryTab(),
+    const ProfileTab(),
   ];
 
   @override
@@ -104,7 +106,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) {
+          setState(() => _selectedIndex = i);
+          if (i == 0) {
+            _dashboardKey.currentState?.refreshActives();
+          }
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: AppColors.deepPurple,
         selectedItemColor: AppColors.gold,

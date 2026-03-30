@@ -29,8 +29,18 @@ class LivraisonService {
     try {
       final r = await _api.get('/api/livreur/livraisons/actives');
       if (r.statusCode == 200 && r.data['success'] == true) {
-        final list = r.data['data'] as List<dynamic>;
-        return list.map((e) => LivraisonModel.fromJson(e as Map<String, dynamic>)).toList();
+        final raw = r.data['data'];
+        if (raw is! List) return [];
+        final out = <LivraisonModel>[];
+        for (final e in raw) {
+          if (e is! Map) continue;
+          try {
+            out.add(LivraisonModel.fromJson(Map<String, dynamic>.from(e)));
+          } catch (err) {
+            AppLogger.error('[Livraison] parse active item ignoré', err);
+          }
+        }
+        return out;
       }
     } catch (e) { AppLogger.error('[Livraison] getLivraisonsActives', e); }
     return [];
