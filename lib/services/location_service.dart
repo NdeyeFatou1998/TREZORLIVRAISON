@@ -62,16 +62,16 @@ class LocationService {
 
   /// Démarre le suivi GPS en temps réel.
   /// [onPosition] : callback appelé à chaque nouvelle position.
-  /// [intervalMs] : intervalle entre chaque mise à jour (défaut 5 secondes).
+  /// [distanceFilterMeters] : 0 = fréquence max (mission active / suivi type Uber).
   void startTracking({
     required void Function(Position position) onPosition,
-    int intervalMs = 5000,
+    int distanceFilterMeters = 8,
   }) {
     stopTracking(); // Arrêter un éventuel tracking précédent
     _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Mise à jour toutes les 10 mètres
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: distanceFilterMeters,
       ),
     ).listen(
       (position) {

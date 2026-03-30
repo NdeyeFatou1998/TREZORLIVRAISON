@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show max, min;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../models/livraison.dart';
 import '../../services/livraison_service.dart';
 import '../../services/location_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/directions_service.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// ÉCRAN DE LIVRAISON ACTIVE — cœur de l'app Trezor Livraison
@@ -44,6 +47,14 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
 
   // Marqueurs carte
   final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  String? _nextTurnInstruction;
+  String? _routeEtaLine;
+  String? _routeFetchError;
+  LatLng? _lastRouteAnchor;
+  DateTime? _lastRouteAt;
+  int _routeGen = 0;
+  Timer? _routeRefreshTimer;
 
   // Photo preuve
   File? _photoPreuve;
@@ -60,11 +71,13 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
     _initLocation();
     _startPositionTracking();
     _startPeriodicRefresh();
+    _startRoutePeriodicRefresh();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _routeRefreshTimer?.cancel();
     _locationService.stopTracking();
     _mapController?.dispose();
     super.dispose();
@@ -81,22 +94,29 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
       });
       _mapController?.animateCamera(CameraUpdate.newLatLng(
           LatLng(pos.latitude, pos.longitude)));
+      await _refreshDrivingRoute(pos);
     }
   }
 
   void _startPositionTracking() {
     _locationService.startTracking(
+      distanceFilterMeters: 5,
       onPosition: (pos) async {
         if (!mounted) return;
         setState(() {
           _currentPosition = pos;
           _updateMarkers(pos.latitude, pos.longitude);
         });
+        _maybeRefreshRouteFromMovement(pos);
         // Envoyer position au backend
+        final h = pos.heading;
         await _livraisonService.updatePosition(
-            _livraison.id, pos.latitude, pos.longitude);
+          _livraison.id,
+          pos.latitude,
+          pos.longitude,
+          heading: h >= 0 ? h : null,
+        );
       },
-      intervalMs: 5000,
     );
   }
 
@@ -104,9 +124,164 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       final updated = await _livraisonService.getSuivi(_livraison.id);
       if (updated != null && mounted) {
+        final prev = _livraison.statut;
         setState(() => _livraison = updated);
+        if (updated.statut != prev) {
+          final p = _currentPosition;
+          if (p != null) await _refreshDrivingRoute(p);
+        }
       }
     });
+  }
+
+  void _startRoutePeriodicRefresh() {
+    _routeRefreshTimer = Timer.periodic(const Duration(seconds: 90), (_) {
+      if (!mounted || _livraison.isTerminee) return;
+      final pos = _currentPosition;
+      if (pos != null) _refreshDrivingRoute(pos);
+    });
+  }
+
+  /// Destination routière : vendeur tant que le colis n’est pas récupéré, puis acheteur.
+  LatLng? _navigationTarget() {
+    if (_livraison.isTerminee) return null;
+    final towardBuyer =
+        _livraison.statut == 'COLLECTE' || _livraison.statut == 'EN_ROUTE_LIVRAISON';
+    if (towardBuyer) {
+      if (_livraison.latAcheteur != null && _livraison.lonAcheteur != null) {
+        return LatLng(_livraison.latAcheteur!, _livraison.lonAcheteur!);
+      }
+      return null;
+    }
+    if (_livraison.latVendeur != null && _livraison.lonVendeur != null) {
+      return LatLng(_livraison.latVendeur!, _livraison.lonVendeur!);
+    }
+    return null;
+  }
+
+  void _maybeRefreshRouteFromMovement(Position pos) {
+    if (_livraison.isTerminee) return;
+    final dest = _navigationTarget();
+    if (dest == null) return;
+
+    final anchor = _lastRouteAnchor;
+    final lastAt = _lastRouteAt;
+    final now = DateTime.now();
+    var need = false;
+    if (anchor == null || lastAt == null) {
+      need = true;
+    } else {
+      final moved = Geolocator.distanceBetween(
+        anchor.latitude,
+        anchor.longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      if (moved > 150 || now.difference(lastAt) > const Duration(seconds: 90)) {
+        need = true;
+      }
+    }
+    if (need) _refreshDrivingRoute(pos);
+  }
+
+  Future<void> _refreshDrivingRoute(Position pos) async {
+    final dest = _navigationTarget();
+    if (dest == null) {
+      if (!mounted) return;
+      setState(() {
+        _polylines.clear();
+        _nextTurnInstruction = null;
+        _routeEtaLine = null;
+        _routeFetchError = null;
+      });
+      return;
+    }
+
+    final id = ++_routeGen;
+    final origin = LatLng(pos.latitude, pos.longitude);
+    final data = await DirectionsService.fetchDrivingRoute(
+      origin: origin,
+      destination: dest,
+    );
+
+    if (!mounted || id != _routeGen) return;
+
+    if (!data.isOk) {
+      setState(() {
+        _polylines.clear();
+        _routeFetchError = data.errorMessage;
+        _nextTurnInstruction = null;
+        _routeEtaLine = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _routeFetchError = null;
+      _polylines
+        ..clear()
+        ..add(
+          Polyline(
+            polylineId: const PolylineId('itineraire'),
+            color: const Color(0xFF4285F4),
+            width: 5,
+            points: data.points,
+            geodesic: true,
+          ),
+        );
+      _nextTurnInstruction = data.nextInstruction;
+      final parts = <String>[];
+      if (data.durationRemainingText != null) {
+        parts.add(data.durationRemainingText!);
+      }
+      if (data.distanceRemainingText != null) {
+        parts.add(data.distanceRemainingText!);
+      }
+      _routeEtaLine = parts.isEmpty ? null : parts.join(' · ');
+      _lastRouteAnchor = origin;
+      _lastRouteAt = DateTime.now();
+    });
+
+    _fitMapToRoute(data.points);
+  }
+
+  void _fitMapToRoute(List<LatLng> points) {
+    if (_mapController == null || points.length < 2) return;
+    double minLat = points.first.latitude;
+    double maxLat = minLat;
+    double minLng = points.first.longitude;
+    double maxLng = minLng;
+    for (final p in points) {
+      minLat = min(minLat, p.latitude);
+      maxLat = max(maxLat, p.latitude);
+      minLng = min(minLng, p.longitude);
+      maxLng = max(maxLng, p.longitude);
+    }
+    if (!mounted) return;
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        100,
+      ),
+    );
+  }
+
+  Future<void> _openExternalTurnByTurn() async {
+    final dest = _navigationTarget();
+    final pos = _currentPosition;
+    if (dest == null) return;
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${dest.latitude},${dest.longitude}'
+      '&travelmode=driving'
+      '${pos != null ? '&origin=${pos.latitude},${pos.longitude}' : ''}',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   void _updateMarkers(double livreurLat, double livreurLon) {
@@ -163,6 +338,8 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
       }
       if (updated != null && mounted) {
         setState(() => _livraison = updated!);
+        final p = _currentPosition;
+        if (p != null) await _refreshDrivingRoute(p);
         _showSnack(
           action == 'EN_ROUTE_COLLECTE' ? '🛵 En route vers le vendeur'
             : action == 'COLLECTE' ? '📦 Colis récupéré !'
@@ -357,10 +534,13 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                             : const LatLng(14.7167, -17.4677)), // Dakar par défaut
                     zoom: 14,
                   ),
+                  padding: const EdgeInsets.only(top: 88, left: 8, right: 8, bottom: 88),
                   markers: _markers,
+                  polylines: _polylines,
                   myLocationEnabled: true,
                   myLocationButtonEnabled: false,
                   zoomControlsEnabled: false,
+                  compassEnabled: true,
                   mapType: MapType.normal,
                   onMapCreated: (ctrl) {
                     _mapController = ctrl;
@@ -370,6 +550,84 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                     }
                   },
                 ),
+                if (!isLivree &&
+                    (_nextTurnInstruction != null ||
+                        _routeEtaLine != null ||
+                        _routeFetchError != null))
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    top: 10,
+                    child: Material(
+                      elevation: 6,
+                      borderRadius: BorderRadius.circular(12),
+                      color: cardColor,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: AppColors.gold.withValues(alpha: 0.35)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  _routeFetchError != null
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.turn_slight_right,
+                                  color: _routeFetchError != null
+                                      ? Colors.orange
+                                      : AppColors.deepPurple,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _routeFetchError ??
+                                        _nextTurnInstruction ??
+                                        'Itinéraire',
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.25,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Navigation complète (Google Maps)',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 40, minHeight: 40),
+                                  onPressed: _openExternalTurnByTurn,
+                                  icon: Icon(
+                                    Icons.navigation,
+                                    color: AppColors.deepPurple,
+                                    size: 22,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_routeEtaLine != null && _routeFetchError == null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _routeEtaLine!,
+                                style: TextStyle(
+                                  color: secColor,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 // Bouton recentrer
                 Positioned(
                   bottom: 12, right: 12,

@@ -114,10 +114,16 @@ class LivraisonService {
     return _updateEtape('/api/livreur/livraisons/$livraisonId/en-route-livraison');
   }
 
-  Future<void> updatePosition(String livraisonId, double lat, double lon) async {
+  Future<void> updatePosition(String livraisonId, double lat, double lon, {double? heading}) async {
     try {
-      await _api.put('/api/livreur/livraisons/$livraisonId/position',
-          data: {'latitude': lat, 'longitude': lon});
+      final body = <String, dynamic>{
+        'latitude': lat,
+        'longitude': lon,
+      };
+      if (heading != null && heading >= 0) {
+        body['heading'] = heading;
+      }
+      await _api.put('/api/livreur/livraisons/$livraisonId/position', data: body);
     } catch (_) {}
   }
 
