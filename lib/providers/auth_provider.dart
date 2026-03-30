@@ -4,6 +4,7 @@ import '../models/livreur.dart';
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
+import '../services/livraison_dashboard_websocket_service.dart';
 import '../utils/app_logger.dart';
 
 /// Provider d'authentification du livreur.
@@ -32,6 +33,7 @@ class AuthProvider extends ChangeNotifier {
       // Recharger le profil complet pour avoir toutes les données
       await refreshProfile();
       AppLogger.log('[Auth] checkSession: livreur=${_livreur?.fullName ?? "NULL"}');
+      _connectDashboardWebSocket();
       return _livreur != null;
     }
     return false;
@@ -46,6 +48,7 @@ class AuthProvider extends ChangeNotifier {
         final data = r.data['data'] as Map<String, dynamic>;
         AppLogger.log('[Auth] refreshProfile OK: prenom=${data['prenom']}, nom=${data['nom']}, photoSelfie=${data['photoSelfie'] != null}');
         _livreur = LivreurModel.fromJson(data);
+        _connectDashboardWebSocket();
         notifyListeners();
       } else {
         AppLogger.error('[Auth] refreshProfile: réponse inattendue', r.data);
@@ -93,6 +96,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// Déconnexion.
   Future<void> logout() async {
+    LivraisonDashboardWebSocketService().disconnect();
     await NotificationService().deleteTokenFromBackend();
     await _authService.logout();
     _livreur = null;
@@ -116,5 +120,11 @@ class AuthProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  void _connectDashboardWebSocket() {
+    final id = _livreur?.id;
+    if (id == null || id.isEmpty) return;
+    LivraisonDashboardWebSocketService().connect(id);
   }
 }

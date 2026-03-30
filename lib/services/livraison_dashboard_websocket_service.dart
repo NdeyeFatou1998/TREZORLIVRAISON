@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
@@ -18,9 +19,12 @@ class LivraisonDashboardWebSocketService {
   StompClient? _stomp;
   bool _connected = false;
   String? _currentLivreurId;
+  final StreamController<Map<String, dynamic>> _eventsController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   void Function(Map<String, dynamic> event)? onEvent;
   bool get isConnected => _connected;
+  Stream<Map<String, dynamic>> get events => _eventsController.stream;
 
   Future<void> connect(String livreurId) async {
     if (_connected && _currentLivreurId == livreurId) return;
@@ -49,6 +53,9 @@ class LivraisonDashboardWebSocketService {
                 try {
                   final map = Map<String, dynamic>.from(jsonDecode(f.body!) as Map);
                   onEvent?.call(map);
+                  if (!_eventsController.isClosed) {
+                    _eventsController.add(map);
+                  }
                 } catch (e) {
                   AppLogger.error('[LivraisonDashboardWS] parse', e);
                 }

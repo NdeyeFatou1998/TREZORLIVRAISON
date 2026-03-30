@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/livraison.dart';
@@ -23,6 +24,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
   String? _accepting;
   String? _refusing;
   final LivraisonDashboardWebSocketService _dashboardWs = LivraisonDashboardWebSocketService();
+  StreamSubscription<Map<String, dynamic>>? _dashboardSub;
 
   @override
   void initState() {
@@ -31,14 +33,15 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final livreurId = context.read<AuthProvider>().livreur?.id;
       if (livreurId != null && livreurId.isNotEmpty) {
-        _dashboardWs.onEvent = (event) {
+        _dashboardSub?.cancel();
+        _dashboardSub = _dashboardWs.events.listen((event) {
           final action = event['action']?.toString();
           if (action == 'DELIVERY_OFFERED' ||
               action == 'DELIVERY_TAKEN_BY_OTHER' ||
               action == 'DELIVERY_ASSIGNED') {
             _load();
           }
-        };
+        });
         _dashboardWs.connect(livreurId);
       }
     });
@@ -46,6 +49,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
 
   @override
   void dispose() {
+    _dashboardSub?.cancel();
     _dashboardWs.disconnect();
     super.dispose();
   }

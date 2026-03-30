@@ -145,7 +145,6 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      sound: const RawResourceAndroidNotificationSound('notification'),
       enableVibration: true,
       color: isCadeauEssai ? const Color(0xFFC9A227) : null,
       styleInformation: isCadeauEssai
@@ -161,7 +160,6 @@ class NotificationService {
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
-      sound: 'notification.aiff',
       subtitle: isCadeauEssai ? 'Offert par Trezor' : null,
     );
 

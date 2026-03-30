@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/livraison.dart';
 import '../../services/livraison_service.dart';
 import '../../services/api_client.dart';
+import '../../services/livraison_dashboard_websocket_service.dart';
 import '../delivery/active_delivery_screen.dart';
 
 /// Onglet Dashboard — aperçu des livraisons actives + toggle disponibilité.
@@ -18,7 +20,9 @@ class DashboardTab extends StatefulWidget {
 class DashboardTabState extends State<DashboardTab> {
   final LivraisonService _livraisonService = LivraisonService();
   final ApiClient _api = ApiClient();
+  final LivraisonDashboardWebSocketService _dashboardWs = LivraisonDashboardWebSocketService();
   final TextEditingController _codeController = TextEditingController();
+  StreamSubscription<Map<String, dynamic>>? _dashboardSub;
 
   List<LivraisonModel> _actives = [];
   bool _isLoading = true;
@@ -35,11 +39,26 @@ class DashboardTabState extends State<DashboardTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<AuthProvider>().refreshProfile();
+      final livreurId = context.read<AuthProvider>().livreur?.id;
+      if (livreurId != null && livreurId.isNotEmpty) {
+        _dashboardSub?.cancel();
+        _dashboardSub = _dashboardWs.events.listen((event) {
+          final action = event['action']?.toString();
+          if (action == 'DELIVERY_OFFERED' ||
+              action == 'DELIVERY_TAKEN_BY_OTHER' ||
+              action == 'DELIVERY_ASSIGNED') {
+            _loadActives();
+          }
+        });
+        _dashboardWs.connect(livreurId);
+      }
     });
   }
 
   @override
   void dispose() {
+    _dashboardSub?.cancel();
+    _dashboardWs.disconnect();
     _codeController.dispose();
     super.dispose();
   }
