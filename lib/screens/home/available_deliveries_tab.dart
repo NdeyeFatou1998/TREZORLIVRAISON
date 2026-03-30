@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/livraison.dart';
 import '../../services/livraison_service.dart';
+import '../../services/livraison_dashboard_websocket_service.dart';
+import '../../providers/auth_provider.dart';
 import '../delivery/active_delivery_screen.dart';
 
 /// Onglet Disponibles — liste des livraisons sans livreur assigné.
@@ -19,11 +22,32 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
   bool _isLoading = true;
   String? _accepting;
   String? _refusing;
+  final LivraisonDashboardWebSocketService _dashboardWs = LivraisonDashboardWebSocketService();
 
   @override
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final livreurId = context.read<AuthProvider>().livreur?.id;
+      if (livreurId != null && livreurId.isNotEmpty) {
+        _dashboardWs.onEvent = (event) {
+          final action = event['action']?.toString();
+          if (action == 'DELIVERY_OFFERED' ||
+              action == 'DELIVERY_TAKEN_BY_OTHER' ||
+              action == 'DELIVERY_ASSIGNED') {
+            _load();
+          }
+        };
+        _dashboardWs.connect(livreurId);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _dashboardWs.disconnect();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -190,6 +214,22 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
                   const Spacer(),
                   Text(l.createdAt.split('T').first, style: TextStyle(color: secColor, fontSize: 12)),
                 ]),
+                if ((l.searchRadiusKm ?? 0) > 0 || (l.searchStep ?? 0) > 0 || (l.searchMessage ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      l.searchMessage ??
+                          'Vague ${l.searchStep ?? '-'} • Rayon ${l.searchRadiusKm ?? '-'} km',
+                      style: TextStyle(color: secColor, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
 
                 // Bouton accepter

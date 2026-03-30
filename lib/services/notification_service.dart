@@ -204,6 +204,15 @@ class NotificationService {
       case 'LIVRAISON_PROPOSEE':
         dev.log('[Notifications] Livraison proposée: ${data['livraisonId']}');
         break;
+      case 'DELIVERY_OFFERED':
+        dev.log('[Notifications] Offre livraison: ${data['livraisonId']} (rayon=${data['searchRadiusKm']})');
+        break;
+      case 'DELIVERY_TAKEN_BY_OTHER':
+        dev.log('[Notifications] Offre prise par un autre livreur: ${data['livraisonId']}');
+        break;
+      case 'DELIVERY_ASSIGNED':
+        dev.log('[Notifications] Livraison assignée: ${data['livraisonId']}');
+        break;
 
       case 'LIVRAISON_ANNULEE':
         dev.log('[Notifications] Livraison annulée: ${data['livraisonId']}');

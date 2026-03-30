@@ -53,9 +53,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       AppLogger.log('[Home] Heartbeat position: arrêt (hors ligne)');
       return;
     }
-    AppLogger.log('[Home] Heartbeat position: toutes les 10 s');
+    AppLogger.log('[Home] Heartbeat position: toutes les 5 min');
     _sendPositionOnce();
-    _positionHeartbeat = Timer.periodic(const Duration(seconds: 10), (_) => _sendPositionOnce());
+    _positionHeartbeat = Timer.periodic(const Duration(minutes: 5), (_) => _sendPositionOnce());
   }
 
   Future<void> _sendPositionOnce() async {

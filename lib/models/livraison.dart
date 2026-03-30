@@ -20,6 +20,10 @@ class LivraisonModel {
   final Map<String, dynamic>? acheteur;
   final Map<String, dynamic>? vendeur;
   final Map<String, dynamic>? livreur;
+  final int? searchRadiusKm;
+  final int? searchStep;
+  final String? searchMessage;
+  final String? propositionExpireAt;
 
   const LivraisonModel({
     required this.id,
@@ -42,6 +46,10 @@ class LivraisonModel {
     this.acheteur,
     this.vendeur,
     this.livreur,
+    this.searchRadiusKm,
+    this.searchStep,
+    this.searchMessage,
+    this.propositionExpireAt,
   });
 
   factory LivraisonModel.fromJson(Map<String, dynamic> json) => LivraisonModel(
@@ -65,13 +73,17 @@ class LivraisonModel {
         acheteur: json['acheteur'] as Map<String, dynamic>?,
         vendeur: json['vendeur'] as Map<String, dynamic>?,
         livreur: json['livreur'] as Map<String, dynamic>?,
+        searchRadiusKm: (json['searchRadiusKm'] as num?)?.toInt(),
+        searchStep: (json['searchStep'] as num?)?.toInt(),
+        searchMessage: json['searchMessage']?.toString(),
+        propositionExpireAt: json['propositionExpireAt']?.toString(),
       );
 
   /// Étiquette lisible du statut
   String get statutLabel {
     switch (statut) {
       case 'CREE': return 'En attente de livreur';
-      case 'PROPOSEE': return 'Proposée (réponse sous 3h)';
+      case 'PROPOSEE': return 'Proposée (réponse sous 2 min)';
       case 'ACCEPTEE': return 'Livreur assigné';
       case 'EN_ROUTE_COLLECTE': return 'En route vers le vendeur';
       case 'COLLECTE': return 'Colis récupéré';
