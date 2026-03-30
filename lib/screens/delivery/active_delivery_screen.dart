@@ -55,6 +55,8 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
   DateTime? _lastRouteAt;
   int _routeGen = 0;
   Timer? _routeRefreshTimer;
+  /// Évite de recentrer la carte à chaque refresh GPS (sinon itinéraire illisible).
+  String? _lastFitContextKey;
 
   // Photo preuve
   File? _photoPreuve;
@@ -224,9 +226,12 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
           Polyline(
             polylineId: const PolylineId('itineraire'),
             color: const Color(0xFF4285F4),
-            width: 5,
+            width: 6,
             points: data.points,
             geodesic: true,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
           ),
         );
       _nextTurnInstruction = data.nextInstruction;
@@ -242,29 +247,63 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
       _lastRouteAt = DateTime.now();
     });
 
-    _fitMapToRoute(data.points);
+    final fitKey =
+        '${_livraison.statut}|${_navigationTarget()?.latitude},${_navigationTarget()?.longitude}';
+    if (_lastFitContextKey != fitKey) {
+      _lastFitContextKey = fitKey;
+      _fitMapToRoute(data.points);
+    }
   }
 
   void _fitMapToRoute(List<LatLng> points) {
-    if (_mapController == null || points.length < 2) return;
-    double minLat = points.first.latitude;
+    if (_mapController == null) return;
+    final dest = _navigationTarget();
+    final rider = _currentPosition != null
+        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+        : null;
+
+    final all = <LatLng>[...points];
+    if (rider != null) all.add(rider);
+    if (dest != null) all.add(dest);
+
+    if (all.isEmpty) return;
+
+    if (all.length == 1) {
+      if (!mounted) return;
+      _mapController!.animateCamera(CameraUpdate.newLatLngZoom(all.first, 15));
+      return;
+    }
+
+    double minLat = all.first.latitude;
     double maxLat = minLat;
-    double minLng = points.first.longitude;
+    double minLng = all.first.longitude;
     double maxLng = minLng;
-    for (final p in points) {
+    for (final p in all) {
       minLat = min(minLat, p.latitude);
       maxLat = max(maxLat, p.latitude);
       minLng = min(minLng, p.longitude);
       maxLng = max(maxLng, p.longitude);
     }
+    const eps = 0.0025;
+    if ((maxLat - minLat).abs() < 0.0008) {
+      minLat -= eps;
+      maxLat += eps;
+    }
+    if ((maxLng - minLng).abs() < 0.0008) {
+      minLng -= eps;
+      maxLng += eps;
+    }
+
     if (!mounted) return;
+    final mq = MediaQuery.of(context);
+    final bottomPad = mq.size.height * 0.22 + mq.padding.bottom + 24;
     _mapController!.animateCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
           southwest: LatLng(minLat, minLng),
           northeast: LatLng(maxLat, maxLng),
         ),
-        100,
+        max(80.0, bottomPad),
       ),
     );
   }
@@ -518,23 +557,29 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ── Carte Google Maps ──
-          Expanded(
-            flex: 5,
-            child: Stack(
-              children: [
-                GoogleMap(
+      body: Builder(
+        builder: (context) {
+          final mq = MediaQuery.of(context);
+          final mapBottomPad = mq.size.height * 0.26 + mq.padding.bottom;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: GoogleMap(
                   initialCameraPosition: CameraPosition(
                     target: _currentPosition != null
                         ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
                         : (_livraison.latVendeur != null
                             ? LatLng(_livraison.latVendeur!, _livraison.lonVendeur!)
-                            : const LatLng(14.7167, -17.4677)), // Dakar par défaut
+                            : const LatLng(14.7167, -17.4677)),
                     zoom: 14,
                   ),
-                  padding: const EdgeInsets.only(top: 88, left: 8, right: 8, bottom: 88),
+                  padding: EdgeInsets.only(
+                    top: mq.padding.top + kToolbarHeight + 8,
+                    left: 10,
+                    right: 10,
+                    bottom: mapBottomPad,
+                  ),
                   markers: _markers,
                   polylines: _polylines,
                   myLocationEnabled: true,
@@ -550,128 +595,154 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                     }
                   },
                 ),
-                if (!isLivree &&
-                    (_nextTurnInstruction != null ||
-                        _routeEtaLine != null ||
-                        _routeFetchError != null))
-                  Positioned(
-                    left: 10,
-                    right: 10,
-                    top: 10,
-                    child: Material(
-                      elevation: 6,
-                      borderRadius: BorderRadius.circular(12),
-                      color: cardColor,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: AppColors.gold.withValues(alpha: 0.35)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  _routeFetchError != null
-                                      ? Icons.warning_amber_rounded
-                                      : Icons.turn_slight_right,
-                                  color: _routeFetchError != null
-                                      ? Colors.orange
-                                      : AppColors.deepPurple,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _routeFetchError ??
-                                        _nextTurnInstruction ??
-                                        'Itinéraire',
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.25,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Navigation complète (Google Maps)',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 40, minHeight: 40),
-                                  onPressed: _openExternalTurnByTurn,
-                                  icon: Icon(
-                                    Icons.navigation,
-                                    color: AppColors.deepPurple,
-                                    size: 22,
-                                  ),
-                                ),
-                              ],
+              ),
+              Positioned(
+                right: 12,
+                bottom: mq.padding.bottom + mq.size.height * 0.22 + 8,
+                child: FloatingActionButton.small(
+                  heroTag: 'active_delivery_recenter',
+                  onPressed: () {
+                    if (_currentPosition != null) {
+                      _mapController?.animateCamera(CameraUpdate.newLatLng(
+                          LatLng(_currentPosition!.latitude, _currentPosition!.longitude)));
+                    }
+                  },
+                  backgroundColor: AppColors.deepPurple,
+                  child: const Icon(Icons.my_location, color: Colors.white, size: 18),
+                ),
+              ),
+              DraggableScrollableSheet(
+                initialChildSize: isLivree ? 0.42 : 0.28,
+                minChildSize: 0.12,
+                maxChildSize: 0.92,
+                snap: true,
+                snapSizes: const [0.12, 0.28, 0.55, 0.92],
+                builder: (context, scrollController) {
+                  return Material(
+                    color: cardColor,
+                    elevation: 8,
+                    shadowColor: Colors.black45,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 10, bottom: 6),
+                            child: Container(
+                              width: 42,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: secColor.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
-                            if (_routeEtaLine != null && _routeFetchError == null) ...[
-                              const SizedBox(height: 4),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.drag_handle, color: secColor, size: 20),
+                              const SizedBox(width: 6),
                               Text(
-                                _routeEtaLine!,
+                                isLivree ? 'Mission terminée' : 'Détails & étapes',
                                 style: TextStyle(
-                                  color: secColor,
-                                  fontSize: 11.5,
+                                  color: textColor,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
                                 ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: ListView(
+                            controller: scrollController,
+                            padding: EdgeInsets.fromLTRB(16, 0, 16, mq.padding.bottom + 16),
+                            children: isLivree
+                                ? [_buildDoneView(textColor, secColor, cardColor)]
+                                : [
+                                    if (_nextTurnInstruction != null ||
+                                        _routeEtaLine != null ||
+                                        _routeFetchError != null)
+                                      _buildRouteSummaryCard(cardColor, textColor, secColor),
+                                    if (_nextTurnInstruction != null ||
+                                        _routeEtaLine != null ||
+                                        _routeFetchError != null)
+                                      const SizedBox(height: 12),
+                                    _buildAddressesCard(cardColor, textColor, secColor),
+                                    const SizedBox(height: 12),
+                                    _buildProgressStepper(textColor, secColor),
+                                    const SizedBox(height: 12),
+                                    _buildActionButton(),
+                                    if (_showValidationPanel) ...[
+                                      const SizedBox(height: 12),
+                                      _buildValidationPanel(cardColor, textColor, secColor),
+                                    ],
+                                  ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                // Bouton recentrer
-                Positioned(
-                  bottom: 12, right: 12,
-                  child: FloatingActionButton.small(
-                    onPressed: () {
-                      if (_currentPosition != null) {
-                        _mapController?.animateCamera(CameraUpdate.newLatLng(
-                            LatLng(_currentPosition!.latitude, _currentPosition!.longitude)));
-                      }
-                    },
-                    backgroundColor: AppColors.deepPurple,
-                    child: const Icon(Icons.my_location, color: Colors.white, size: 18),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRouteSummaryCard(Color cardColor, Color textColor, Color secColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                _routeFetchError != null ? Icons.warning_amber_rounded : Icons.turn_slight_right,
+                color: _routeFetchError != null ? Colors.orange : AppColors.deepPurple,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _routeFetchError ?? _nextTurnInstruction ?? 'Itinéraire',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          // ── Panel infos + actions ──
-          Expanded(
-            flex: 5,
-            child: Container(
-              color: bgColor,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: isLivree
-                    ? _buildDoneView(textColor, secColor, cardColor)
-                    : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        // Adresses
-                        _buildAddressesCard(cardColor, textColor, secColor),
-                        const SizedBox(height: 12),
-                        // Étapes de progression
-                        _buildProgressStepper(textColor, secColor),
-                        const SizedBox(height: 12),
-                        // Bouton action principale
-                        _buildActionButton(),
-                        if (_showValidationPanel) ...[
-                          const SizedBox(height: 12),
-                          _buildValidationPanel(cardColor, textColor, secColor),
-                        ],
-                      ]),
               ),
-            ),
+              IconButton(
+                tooltip: 'Ouvrir dans Google Maps',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                onPressed: _openExternalTurnByTurn,
+                icon: Icon(Icons.navigation, color: AppColors.deepPurple, size: 22),
+              ),
+            ],
           ),
+          if (_routeEtaLine != null && _routeFetchError == null) ...[
+            const SizedBox(height: 4),
+            Text(
+              _routeEtaLine!,
+              style: TextStyle(color: secColor, fontSize: 11.5),
+            ),
+          ],
         ],
       ),
     );
