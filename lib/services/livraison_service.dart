@@ -73,6 +73,20 @@ class LivraisonService {
     return null;
   }
 
+  Future<LivraisonModel?> assignerParCode(String codeLivraison) async {
+    try {
+      final r = await _api.post('/api/livreur/livraisons/assigner-par-code', data: {
+        'codeLivraison': codeLivraison.trim().toUpperCase(),
+      });
+      if (r.statusCode == 200 && r.data['success'] == true) {
+        return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
+      }
+    } on DioException catch (e) {
+      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+    }
+    return null;
+  }
+
   Future<LivraisonModel?> refuser(String livraisonId, {String? motif}) async {
     try {
       final r = await _api.post(

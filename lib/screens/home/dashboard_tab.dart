@@ -18,10 +18,12 @@ class DashboardTab extends StatefulWidget {
 class _DashboardTabState extends State<DashboardTab> {
   final LivraisonService _livraisonService = LivraisonService();
   final ApiClient _api = ApiClient();
+  final TextEditingController _codeController = TextEditingController();
 
   List<LivraisonModel> _actives = [];
   bool _isLoading = true;
   bool _togglingDisponibilite = false;
+  bool _assigningByCode = false;
   /// Variable locale pour feedback visuel immédiat du Switch
   bool? _localDisponible;
 
@@ -35,6 +37,12 @@ class _DashboardTabState extends State<DashboardTab> {
     });
   }
 
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadActives() async {
     setState(() => _isLoading = true);
     _actives = await _livraisonService.getLivraisonsActives();
@@ -44,6 +52,32 @@ class _DashboardTabState extends State<DashboardTab> {
   Future<void> _refreshAll() async {
     await context.read<AuthProvider>().refreshProfile();
     await _loadActives();
+  }
+
+  Future<void> _assignerParCode() async {
+    if (_assigningByCode) return;
+    final code = _codeController.text.trim();
+    if (code.isEmpty) return;
+    setState(() => _assigningByCode = true);
+    try {
+      final livraison = await _livraisonService.assignerParCode(code);
+      if (!mounted) return;
+      _codeController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Livraison assignée via code ✅'), backgroundColor: Colors.green),
+      );
+      if (livraison != null) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ActiveDeliveryScreen(livraison: livraison)));
+      }
+      _loadActives();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _assigningByCode = false);
+    }
   }
 
   /// Toggle disponibilité avec feedback visuel immédiat
@@ -166,6 +200,53 @@ class _DashboardTabState extends State<DashboardTab> {
 
                   // ── Toggle disponibilité ──
                   _buildDisponibiliteCard(disponible, cardColor, textColor),
+                  const SizedBox(height: 20),
+
+                  // ── Saisie code livraison ──
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Entrer un code de livraison', style: TextStyle(
+                          color: textColor, fontWeight: FontWeight.w700, fontSize: 14,
+                        )),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _codeController,
+                                textCapitalization: TextCapitalization.characters,
+                                decoration: const InputDecoration(
+                                  hintText: 'Ex: A1B2C3D',
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 44,
+                              child: ElevatedButton(
+                                onPressed: _assigningByCode ? null : _assignerParCode,
+                                child: _assigningByCode
+                                    ? const SizedBox(
+                                        width: 16, height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Text('Valider'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 20),
 
                   // ── Livraisons actives ──
