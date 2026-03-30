@@ -7,6 +7,7 @@ import '../../services/api_client.dart';
 import '../../services/location_service.dart';
 import '../../utils/app_logger.dart';
 import 'dashboard_tab.dart';
+import 'available_deliveries_tab.dart';
 import 'history_tab.dart';
 import 'profile_tab.dart';
 import 'carte_livreurs_tab.dart';
@@ -92,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   late final List<Widget> _tabs = [
     DashboardTab(key: _dashboardKey),
+    const AvailableDeliveriesTab(),
     const CarteLivreursTab(),
     const HistoryTab(),
     const ProfileTab(),
@@ -123,6 +125,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_shipping_outlined),
+            activeIcon: Icon(Icons.local_shipping),
+            label: 'Disponibles',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.map_outlined),
