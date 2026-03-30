@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Accidental Firebase Console export artifacts
+*Console Firebase*.html
+*Console Firebase_files/

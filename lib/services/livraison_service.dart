@@ -73,6 +73,21 @@ class LivraisonService {
     return null;
   }
 
+  Future<LivraisonModel?> refuser(String livraisonId, {String? motif}) async {
+    try {
+      final r = await _api.post(
+        '/api/livreur/livraisons/$livraisonId/refuser',
+        data: {'motif': motif ?? 'Indisponible'},
+      );
+      if (r.statusCode == 200 && r.data['success'] == true) {
+        return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
+      }
+    } on DioException catch (e) {
+      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+    }
+    return null;
+  }
+
   Future<LivraisonModel?> marquerEnRouteCollecte(String livraisonId) async {
     return _updateEtape('/api/livreur/livraisons/$livraisonId/en-route-collecte');
   }

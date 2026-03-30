@@ -18,6 +18,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
   List<LivraisonModel> _livraisons = [];
   bool _isLoading = true;
   String? _accepting;
+  String? _refusing;
 
   @override
   void initState() {
@@ -51,6 +52,25 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
           backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _accepting = null);
+    }
+  }
+
+  Future<void> _refuser(LivraisonModel l) async {
+    setState(() => _refusing = l.id);
+    try {
+      await _service.refuser(l.id, motif: 'Indisponible');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Livraison refusée'), backgroundColor: Colors.orange),
+      );
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _refusing = null);
     }
   }
 
@@ -100,6 +120,8 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
 
   Widget _buildCard(LivraisonModel l, Color cardColor, Color textColor, Color secColor) {
     final isAccepting = _accepting == l.id;
+    final isRefusing = _refusing == l.id;
+    final isProposee = l.statut == 'PROPOSEE';
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -171,24 +193,59 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
                 const SizedBox(height: 14),
 
                 // Bouton accepter
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton.icon(
-                    onPressed: isAccepting ? null : () => _accepter(l),
-                    icon: isAccepting
-                        ? const SizedBox(width: 16, height: 16,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.check_circle_outline, size: 18),
-                    label: Text(isAccepting ? 'Acceptation...' : 'Accepter cette livraison',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.deepPurple,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                if (!isProposee)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton.icon(
+                      onPressed: isAccepting ? null : () => _accepter(l),
+                      icon: isAccepting
+                          ? const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.check_circle_outline, size: 18),
+                      label: Text(isAccepting ? 'Acceptation...' : 'Accepter cette livraison',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.deepPurple,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 44,
+                          child: OutlinedButton.icon(
+                            onPressed: isRefusing ? null : () => _refuser(l),
+                            icon: isRefusing
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.close, size: 16),
+                            label: const Text('Refuser'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SizedBox(
+                          height: 44,
+                          child: ElevatedButton.icon(
+                            onPressed: isAccepting ? null : () => _accepter(l),
+                            icon: isAccepting
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.check, size: 16),
+                            label: const Text('Accepter'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.deepPurple,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
               ],
             ),
           ),

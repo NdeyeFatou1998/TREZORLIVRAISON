@@ -201,6 +201,9 @@ class NotificationService {
       case 'LIVRAISON_ASSIGNEE':
         dev.log('[Notifications] Livraison assignée: ${data['livraisonId']}');
         break;
+      case 'LIVRAISON_PROPOSEE':
+        dev.log('[Notifications] Livraison proposée: ${data['livraisonId']}');
+        break;
 
       case 'LIVRAISON_ANNULEE':
         dev.log('[Notifications] Livraison annulée: ${data['livraisonId']}');

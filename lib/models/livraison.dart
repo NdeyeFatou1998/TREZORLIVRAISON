@@ -71,6 +71,7 @@ class LivraisonModel {
   String get statutLabel {
     switch (statut) {
       case 'CREE': return 'En attente de livreur';
+      case 'PROPOSEE': return 'Proposée (réponse sous 3h)';
       case 'ACCEPTEE': return 'Livreur assigné';
       case 'EN_ROUTE_COLLECTE': return 'En route vers le vendeur';
       case 'COLLECTE': return 'Colis récupéré';
@@ -82,6 +83,6 @@ class LivraisonModel {
     }
   }
 
-  bool get isActive => ['ACCEPTEE', 'EN_ROUTE_COLLECTE', 'COLLECTE', 'EN_ROUTE_LIVRAISON'].contains(statut);
+  bool get isActive => ['PROPOSEE', 'ACCEPTEE', 'EN_ROUTE_COLLECTE', 'COLLECTE', 'EN_ROUTE_LIVRAISON'].contains(statut);
   bool get isTerminee => statut == 'LIVREE' || statut == 'ECHOUEE' || statut == 'ANNULEE';
 }
