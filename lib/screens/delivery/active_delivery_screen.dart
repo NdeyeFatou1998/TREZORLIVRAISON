@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../theme/app_theme.dart';
 import '../../models/livraison.dart';
 import '../../services/livraison_service.dart';
@@ -58,6 +59,12 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
   /// Évite de recentrer la carte à chaque refresh GPS (sinon itinéraire illisible).
   String? _lastFitContextKey;
 
+  final FlutterTts _tts = FlutterTts();
+  bool _ttsReady = false;
+  bool _voiceGuidance = true;
+  String? _lastSpokenInstruction;
+  Timer? _ttsDebounce;
+
   // Photo preuve
   File? _photoPreuve;
   bool _isUploading = false;
@@ -74,10 +81,33 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
     _startPositionTracking();
     _startPeriodicRefresh();
     _startRoutePeriodicRefresh();
+    _configureTts();
+  }
+
+  Future<void> _configureTts() async {
+    await _tts.setLanguage('fr-FR');
+    await _tts.setSpeechRate(0.42);
+    await _tts.setVolume(1.0);
+    if (!mounted) return;
+    setState(() => _ttsReady = true);
+  }
+
+  void _scheduleSpeakTurnInstruction(String? instruction) {
+    if (!_ttsReady || !_voiceGuidance || instruction == null || instruction.isEmpty) return;
+    if (instruction == _lastSpokenInstruction) return;
+    _ttsDebounce?.cancel();
+    _ttsDebounce = Timer(const Duration(milliseconds: 650), () async {
+      if (!mounted || !_voiceGuidance) return;
+      _lastSpokenInstruction = instruction;
+      await _tts.stop();
+      await _tts.speak(instruction);
+    });
   }
 
   @override
   void dispose() {
+    _ttsDebounce?.cancel();
+    _tts.stop();
     _refreshTimer?.cancel();
     _routeRefreshTimer?.cancel();
     _locationService.stopTracking();
@@ -94,8 +124,6 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         _currentPosition = pos;
         _updateMarkers(pos.latitude, pos.longitude);
       });
-      _mapController?.animateCamera(CameraUpdate.newLatLng(
-          LatLng(pos.latitude, pos.longitude)));
       await _refreshDrivingRoute(pos);
     }
   }
@@ -196,6 +224,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         _routeEtaLine = null;
         _routeFetchError = null;
       });
+      _lastSpokenInstruction = null;
       return;
     }
 
@@ -215,6 +244,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         _nextTurnInstruction = null;
         _routeEtaLine = null;
       });
+      _lastSpokenInstruction = null;
       return;
     }
 
@@ -246,6 +276,8 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
       _lastRouteAnchor = origin;
       _lastRouteAt = DateTime.now();
     });
+
+    _scheduleSpeakTurnInstruction(data.nextInstruction);
 
     final fitKey =
         '${_livraison.statut}|${_navigationTarget()?.latitude},${_navigationTarget()?.longitude}';
@@ -303,9 +335,35 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
           southwest: LatLng(minLat, minLng),
           northeast: LatLng(maxLat, maxLng),
         ),
-        max(80.0, bottomPad),
+        max(72.0, bottomPad * 0.85),
       ),
     );
+  }
+
+  /// Recadre sur la polyline d’itinéraire (ou segment livreur → destination).
+  void _recenterOnItinerary() {
+    if (_mapController == null) return;
+    for (final pl in _polylines) {
+      if (pl.points.isNotEmpty) {
+        _fitMapToRoute(pl.points);
+        return;
+      }
+    }
+    final pos = _currentPosition;
+    final dest = _navigationTarget();
+    if (pos != null && dest != null) {
+      _fitMapToRoute([
+        LatLng(pos.latitude, pos.longitude),
+        dest,
+      ]);
+    } else if (pos != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(pos.latitude, pos.longitude),
+          15,
+        ),
+      );
+    }
   }
 
   Future<void> _openExternalTurnByTurn() async {
@@ -461,10 +519,12 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
     final otp = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Code OTP'),
+        title: const Text('Code à 5 chiffres'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Demandez le code au receveur',
-              style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const Text(
+            'Le receveur (intermédiaire) vous communique le code transmis par l’acheteur.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           const SizedBox(height: 14),
           TextField(
             controller: otpCtrl,
@@ -589,10 +649,6 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                   mapType: MapType.normal,
                   onMapCreated: (ctrl) {
                     _mapController = ctrl;
-                    if (_currentPosition != null) {
-                      ctrl.animateCamera(CameraUpdate.newLatLng(
-                          LatLng(_currentPosition!.latitude, _currentPosition!.longitude)));
-                    }
                   },
                 ),
               ),
@@ -601,12 +657,8 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                 bottom: mq.padding.bottom + mq.size.height * 0.22 + 8,
                 child: FloatingActionButton.small(
                   heroTag: 'active_delivery_recenter',
-                  onPressed: () {
-                    if (_currentPosition != null) {
-                      _mapController?.animateCamera(CameraUpdate.newLatLng(
-                          LatLng(_currentPosition!.latitude, _currentPosition!.longitude)));
-                    }
-                  },
+                  tooltip: 'Voir l’itinéraire',
+                  onPressed: _recenterOnItinerary,
                   backgroundColor: AppColors.deepPurple,
                   child: const Icon(Icons.my_location, color: Colors.white, size: 18),
                 ),
@@ -728,11 +780,30 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                 ),
               ),
               IconButton(
+                tooltip: _voiceGuidance ? 'Couper le guidage vocal' : 'Activer le guidage vocal',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                onPressed: () {
+                  setState(() {
+                    _voiceGuidance = !_voiceGuidance;
+                    if (!_voiceGuidance) {
+                      _tts.stop();
+                      _lastSpokenInstruction = null;
+                    }
+                  });
+                },
+                icon: Icon(
+                  _voiceGuidance ? Icons.volume_up : Icons.volume_off,
+                  color: AppColors.deepPurple,
+                  size: 22,
+                ),
+              ),
+              IconButton(
                 tooltip: 'Ouvrir dans Google Maps',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                 onPressed: _openExternalTurnByTurn,
-                icon: Icon(Icons.navigation, color: AppColors.deepPurple, size: 22),
+                icon: const Icon(Icons.navigation, color: AppColors.deepPurple, size: 22),
               ),
             ],
           ),
@@ -923,7 +994,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
             color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
         Text(isIndirect
-            ? 'Demandez le code OTP au receveur'
+            ? 'Demandez le code à 5 chiffres au receveur (donné par l’acheteur)'
             : 'Scannez le QR code de l\'acheteur',
             style: TextStyle(color: secColor, fontSize: 12)),
         const SizedBox(height: 14),
@@ -979,7 +1050,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _validerParOtp,
                   icon: const Icon(Icons.pin, size: 18),
-                  label: const Text('Saisir OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+                  label: const Text('Saisir le code', style: TextStyle(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple,
                     foregroundColor: Colors.white,
@@ -1095,10 +1166,10 @@ class _QrScannerScreenState extends State<_QrScannerScreen> {
               ),
             ),
           ),
-          Positioned(
+          const Positioned(
             bottom: 40,
             left: 0, right: 0,
-            child: const Center(
+            child: Center(
               child: Text('Pointez le QR code de l\'acheteur',
                   style: TextStyle(color: Colors.white, fontSize: 14)),
             ),
