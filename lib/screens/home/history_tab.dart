@@ -156,7 +156,7 @@ class _HistoryTabState extends State<HistoryTab> {
               fontWeight: FontWeight.w600)),
           Text(dateStr, style: TextStyle(color: secColor, fontSize: 11)),
         ])),
-        if (l.montantLivraison != null)
+        if (l.montantLivraison != null && l.statut == 'LIVREE')
           Text('${l.montantLivraison!.toStringAsFixed(0)} F',
               style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),

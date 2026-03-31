@@ -173,7 +173,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
               Expanded(child: Text(l.articleTitre ?? 'Commande',
                   style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15),
                   overflow: TextOverflow.ellipsis)),
-              if (l.montantLivraison != null)
+              if (l.montantLivraison != null && l.statut == 'LIVREE')
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
