@@ -49,7 +49,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       );
       return;
     }
-    final uri = Uri.parse(url);
+    final resolved = url.startsWith('http') ? url : '${ApiClient.baseUrl}$url';
+    final uri = Uri.parse(resolved);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
