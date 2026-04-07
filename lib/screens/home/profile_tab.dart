@@ -8,6 +8,7 @@ import '../../services/api_client.dart';
 import '../auth/login_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../profile/payment_history_screen.dart';
+import '../../constants/paytech_payment_methods.dart';
 
 /// Onglet Profil — photo + nom, statut, abonnement, boutons actions.
 class ProfileTab extends StatefulWidget {
@@ -32,38 +33,59 @@ class _ProfileTabState extends State<ProfileTab> {
 
   /// Initie un paiement PayTech pour l'abonnement
   Future<void> _payerAbonnement() async {
+    String method = kPayTechPaymentMethods.first;
     final confirme = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Renouveler l\'abonnement'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Montant: 2 000 FCFA / mois',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            SizedBox(height: 8),
-            Text('Wave, Orange Money, Free Money', style: TextStyle(fontSize: 13, color: Colors.grey)),
-            SizedBox(height: 12),
-            Text('Vous serez redirigé vers la page de paiement sécurisée PayTech.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.deepPurple, foregroundColor: Colors.white),
-            child: const Text('Payer maintenant'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Renouveler l\'abonnement'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Montant: 2 000 FCFA / mois',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 12),
+                const Text('Moyen de paiement', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                DropdownButton<String>(
+                  isExpanded: true,
+                  value: method,
+                  items: kPayTechPaymentMethods
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => method = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Nom et prénom seront préremplis depuis votre profil. Vous serez redirigé vers PayTech.',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.deepPurple, foregroundColor: Colors.white),
+                child: const Text('Payer maintenant'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (confirme != true) return;
 
     setState(() => _loadingAbonnement = true);
     try {
-      final r = await _api.post('/api/livreur/abonnement/initier-paiement');
+      final r = await _api.post(
+        '/api/livreur/abonnement/initier-paiement',
+        data: {'targetPayment': method},
+      );
       if (!mounted) return;
       if (r.statusCode == 200 && r.data['success'] == true) {
         final redirectUrl = r.data['data']['redirectUrl'] as String?;
