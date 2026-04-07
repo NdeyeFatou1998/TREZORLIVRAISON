@@ -111,7 +111,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     final statut = p['statut']?.toString() ?? '';
     final montant = p['montant']?.toString() ?? '2000';
     final refPaiement = p['refPaiement']?.toString() ?? '-';
-    final modePaiement = p['modePaiement']?.toString() ?? '-';
+    final modePaiement = _formatPaymentMethod(p['modePaiement']?.toString());
     final urlFacture = p['urlFacture']?.toString();
     final numeroFacture = p['numeroFacture']?.toString();
 
@@ -221,5 +221,16 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         ],
       ),
     );
+  }
+
+  String _formatPaymentMethod(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return 'Non renseigne';
+    final v = raw.toUpperCase();
+    if (v.contains('WAVE')) return 'Wave';
+    if (v.contains('ORANGE') || v == 'OM') return 'Orange Money';
+    if (v.contains('FREE')) return 'Free Money';
+    if (v.contains('MTN')) return 'MTN MoMo';
+    if (v.contains('CARD')) return 'Carte bancaire';
+    return raw;
   }
 }
