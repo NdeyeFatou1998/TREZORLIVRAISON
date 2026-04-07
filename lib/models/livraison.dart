@@ -14,6 +14,7 @@ class LivraisonModel {
   final double? lonLivreur;
   final String? articleTitre;
   final String? qrCodeToken;
+  final String? codeLivraison;
   final double? montantLivraison;
   final String? dateLivraison;
   final String createdAt;
@@ -40,6 +41,7 @@ class LivraisonModel {
     this.lonLivreur,
     this.articleTitre,
     this.qrCodeToken,
+    this.codeLivraison,
     this.montantLivraison,
     this.dateLivraison,
     required this.createdAt,
@@ -74,6 +76,7 @@ class LivraisonModel {
         lonLivreur: (json['lonLivreur'] as num?)?.toDouble(),
         articleTitre: json['articleTitre']?.toString(),
         qrCodeToken: json['qrCodeToken']?.toString(),
+        codeLivraison: json['codeLivraison']?.toString(),
         montantLivraison: (json['montantLivraison'] as num?)?.toDouble(),
         dateLivraison: json['dateLivraison']?.toString(),
         createdAt: json['createdAt']?.toString() ?? '',
@@ -90,7 +93,10 @@ class LivraisonModel {
   String get statutLabel {
     switch (statut) {
       case 'CREE': return 'En attente de livreur';
-      case 'PROPOSEE': return 'Proposée (réponse sous 2 min)';
+      case 'PROPOSEE':
+        return propositionExpireAt != null && propositionExpireAt!.isNotEmpty
+            ? 'Proposée (réponse en attente)'
+            : 'Proposée';
       case 'ACCEPTEE': return 'Livreur assigné';
       case 'EN_ROUTE_COLLECTE': return 'En route vers le vendeur';
       case 'COLLECTE': return 'Colis récupéré';

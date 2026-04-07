@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_client.dart';
 
@@ -41,7 +40,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     }
   }
 
-  /// Ouvre la facture PDF dans le navigateur
+  /// Ouvre la facture image dans un modal
   Future<void> _ouvrirFacture(String? url) async {
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -50,10 +49,40 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       return;
     }
     final resolved = url.startsWith('http') ? url : '${ApiClient.baseUrl}$url';
-    final uri = Uri.parse(resolved);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4,
+              child: Image.network(
+                resolved,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Impossible d\'afficher la facture image.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -195,14 +224,14 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             ]),
             const SizedBox(height: 6),
             Text('Réf: $refPaiement', style: TextStyle(color: secColor, fontSize: 10)),
-            // Lien facture PDF
+            // Lien facture image
             if (urlFacture != null && urlFacture.isNotEmpty) ...[
               const SizedBox(height: 10),
               Row(children: [
-                const Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
+                const Icon(Icons.image, color: Colors.green, size: 18),
                 const SizedBox(width: 6),
-                Text('Voir la facture PDF', style: TextStyle(color: AppColors.deepPurple, fontSize: 13, fontWeight: FontWeight.w600)),
-                const Icon(Icons.open_in_new, size: 14, color: AppColors.deepPurple),
+                Text('Voir la facture', style: TextStyle(color: AppColors.deepPurple, fontSize: 13, fontWeight: FontWeight.w600)),
+                const Icon(Icons.visibility, size: 14, color: AppColors.deepPurple),
               ]),
             ],
           ],

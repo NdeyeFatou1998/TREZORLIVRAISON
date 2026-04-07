@@ -37,6 +37,7 @@ class _NotificationBootstrapState extends State<_NotificationBootstrap> {
       if (!mounted) return;
       final auth = Provider.of<AuthProvider>(context, listen: false);
       NotificationService().setOnRefreshProfil(() => auth.refreshProfile());
+      NotificationService().setOnDeliveryEvent(() => auth.refreshProfile());
       await NotificationService().initialize();
       await NotificationService().syncFcmTokenToBackendIfLoggedIn();
     });

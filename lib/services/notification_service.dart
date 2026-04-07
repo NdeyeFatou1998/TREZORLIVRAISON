@@ -28,10 +28,16 @@ class NotificationService {
   String? get fcmToken => _fcmToken;
 
   Future<void> Function()? _onRefreshProfil;
+  Future<void> Function()? _onDeliveryEvent;
 
   /// Enregistré depuis [main] pour appeler [AuthProvider.refreshProfile] sans [BuildContext].
   void setOnRefreshProfil(Future<void> Function()? callback) {
     _onRefreshProfil = callback;
+  }
+
+  /// Callback optionnel pour rafraîchir les écrans livraison après push.
+  void setOnDeliveryEvent(Future<void> Function()? callback) {
+    _onDeliveryEvent = callback;
   }
 
   /// Initialise Firebase Messaging et les notifications locales.
@@ -194,30 +200,38 @@ class NotificationService {
 
       case 'NOUVELLE_LIVRAISON':
         dev.log('[Notifications] Nouvelle livraison disponible: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
 
       case 'LIVRAISON_ASSIGNEE':
         dev.log('[Notifications] Livraison assignée: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
       case 'LIVRAISON_PROPOSEE':
         dev.log('[Notifications] Livraison proposée: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
       case 'DELIVERY_OFFERED':
         dev.log('[Notifications] Offre livraison: ${data['livraisonId']} (rayon=${data['searchRadiusKm']})');
+        await _onDeliveryEvent?.call();
         break;
       case 'DELIVERY_TAKEN_BY_OTHER':
         dev.log('[Notifications] Offre prise par un autre livreur: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
       case 'DELIVERY_ASSIGNED':
         dev.log('[Notifications] Livraison assignée: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
 
       case 'LIVRAISON_ANNULEE':
         dev.log('[Notifications] Livraison annulée: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
 
       case 'LIVRAISON_TERMINEE':
         dev.log('[Notifications] Livraison terminée: ${data['livraisonId']}');
+        await _onDeliveryEvent?.call();
         break;
 
       default:

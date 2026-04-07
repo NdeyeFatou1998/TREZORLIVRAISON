@@ -229,7 +229,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
                     ),
                     child: Text(
                       l.searchMessage ??
-                          'Vague ${l.searchStep ?? '-'} • Rayon ${l.searchRadiusKm ?? '-'} km',
+                          'Tentative ${l.searchStep ?? '-'} • Rayon ${l.searchRadiusKm ?? '-'} km',
                       style: TextStyle(color: secColor, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),
