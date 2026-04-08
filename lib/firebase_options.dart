@@ -34,6 +34,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '848735335993',
     projectId: 'trezorandroid',
     storageBucket: 'trezorandroid.firebasestorage.app',
-    iosBundleId: 'com.trezor.trezorlivraison',
+    iosBundleId: 'com.iris.trezorlivraison',
   );
 }
