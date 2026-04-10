@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final ApiClient _api = ApiClient();
   final LocationService _locationService = LocationService();
   final GlobalKey<DashboardTabState> _dashboardKey = GlobalKey<DashboardTabState>();
+  final GlobalKey<HistoryTabState> _historyKey = GlobalKey<HistoryTabState>();
 
   @override
   void initState() {
@@ -88,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed && mounted) {
       context.read<AuthProvider>().refreshProfile();
       _dashboardKey.currentState?.refreshActives();
+      _historyKey.currentState?.refreshHistory();
     }
   }
 
@@ -95,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     DashboardTab(key: _dashboardKey),
     const AvailableDeliveriesTab(),
     const CarteLivreursTab(),
-    const HistoryTab(),
+    HistoryTab(key: _historyKey),
     const ProfileTab(),
   ];
 
@@ -112,6 +114,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() => _selectedIndex = i);
           if (i == 0) {
             _dashboardKey.currentState?.refreshActives();
+          } else if (i == 3) {
+            _historyKey.currentState?.refreshHistory();
           }
         },
         type: BottomNavigationBarType.fixed,

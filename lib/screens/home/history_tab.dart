@@ -9,10 +9,10 @@ class HistoryTab extends StatefulWidget {
   const HistoryTab({super.key});
 
   @override
-  State<HistoryTab> createState() => _HistoryTabState();
+  State<HistoryTab> createState() => HistoryTabState();
 }
 
-class _HistoryTabState extends State<HistoryTab> {
+class HistoryTabState extends State<HistoryTab> {
   final LivraisonService _service = LivraisonService();
   List<LivraisonModel> _historique = [];
   bool _isLoading = true;
@@ -22,6 +22,9 @@ class _HistoryTabState extends State<HistoryTab> {
     super.initState();
     _load();
   }
+
+  /// Exposé au parent (HomeScreen) pour forcer le refresh.
+  Future<void> refreshHistory() => _load();
 
   Future<void> _load() async {
     setState(() => _isLoading = true);

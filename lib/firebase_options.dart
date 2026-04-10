@@ -1,5 +1,5 @@
-// Aligné sur android/app/google-services.json et ios/Runner/GoogleService-Info.plist (projet trezorandroid).
-// Après un nouvel export Firebase, mettre à jour les constantes ou lancer : flutterfire configure
+// Aligne sur android/app/google-services.json et ios/Runner/GoogleService-Info.plist.
+// Apres un nouvel export Firebase, mettre a jour les constantes ou lancer: flutterfire configure.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
@@ -21,19 +21,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD9GTW2arCohP5IOAt9ZSovTRqrf9Zvhsc',
-    appId: '1:848735335993:android:68e3cc25fd8ac1b515ffe8',
-    messagingSenderId: '848735335993',
-    projectId: 'trezorandroid',
-    storageBucket: 'trezorandroid.firebasestorage.app',
+    apiKey: 'AIzaSyDt2Vnc9qKS-gBpZETnk-gTYXKgKUdDL28',
+    appId: '1:510412530643:android:929c81b3eded825930c526',
+    messagingSenderId: '510412530643',
+    projectId: 'iristrezorlivraison',
+    storageBucket: 'iristrezorlivraison.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBcQq95mhR8VfvBh_rgL3XgzzN1QiEmRbY',
-    appId: '1:848735335993:ios:3c8ac82f8850957515ffe8',
-    messagingSenderId: '848735335993',
-    projectId: 'trezorandroid',
-    storageBucket: 'trezorandroid.firebasestorage.app',
+    apiKey: 'AIzaSyCFR5_Eb9vBmmhKmOvpPE0oepBI9eeoSdQ',
+    appId: '1:510412530643:ios:9e0c4d255e2bd47730c526',
+    messagingSenderId: '510412530643',
+    projectId: 'iristrezorlivraison',
+    storageBucket: 'iristrezorlivraison.firebasestorage.app',
     iosBundleId: 'com.iris.trezorlivraison',
   );
 }

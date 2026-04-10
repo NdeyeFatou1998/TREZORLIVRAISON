@@ -18,17 +18,32 @@ class ProfileTab extends StatefulWidget {
   State<ProfileTab> createState() => _ProfileTabState();
 }
 
-class _ProfileTabState extends State<ProfileTab> {
+class _ProfileTabState extends State<ProfileTab> with WidgetsBindingObserver {
   final ApiClient _api = ApiClient();
   bool _loadingAbonnement = false;
+  bool _waitingForPayment = false;
 
   @override
   void initState() {
     super.initState();
-    // Recharger le profil complet depuis le backend à chaque ouverture
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AuthProvider>().refreshProfile();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _waitingForPayment) {
+      _waitingForPayment = false;
+      context.read<AuthProvider>().refreshProfile();
+    }
   }
 
   /// Initie un paiement PayTech pour l'abonnement
@@ -91,6 +106,7 @@ class _ProfileTabState extends State<ProfileTab> {
         final redirectUrl = r.data['data']['redirectUrl'] as String?;
         if (redirectUrl != null && redirectUrl.isNotEmpty) {
           final uri = Uri.parse(redirectUrl);
+          _waitingForPayment = true;
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           throw Exception('URL de paiement non reçue');
