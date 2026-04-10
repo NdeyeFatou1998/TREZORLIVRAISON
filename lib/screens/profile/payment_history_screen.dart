@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_client.dart';
+import '../../widgets/facture_viewer_dialog.dart';
 
 /// Écran Historique de paiements d'abonnement.
 /// Affiche la liste des paiements avec statut, date, montant et lien facture PDF.
@@ -40,49 +43,31 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     }
   }
 
-  /// Ouvre la facture image dans un modal
-  Future<void> _ouvrirFacture(String? url) async {
+  /// Ouvre la facture image dans un dialog premium
+  Future<void> _ouvrirFacture(String? url, {String? numeroFacture}) async {
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Facture non disponible'), backgroundColor: Colors.orange),
       );
       return;
     }
-    final resolved = url.startsWith('http') ? url : '${ApiClient.baseUrl}$url';
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4,
-              child: Image.network(
-                resolved,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Impossible d\'afficher la facture image.',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    try {
+      final resolved = url.startsWith('http') ? url : '${ApiClient.baseUrl}$url';
+      final response = await _api.get(resolved, options: Options(responseType: ResponseType.bytes));
+      final bytes = Uint8List.fromList(List<int>.from(response.data as List));
+      if (!mounted) return;
+      await FactureViewerDialog.show(
+        context,
+        bytes: bytes,
+        numeroFacture: numeroFacture,
+        titre: 'Facture abonnement',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible d\'ouvrir la facture'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -181,7 +166,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     }
 
     return GestureDetector(
-      onTap: urlFacture != null ? () => _ouvrirFacture(urlFacture) : null,
+      onTap: urlFacture != null ? () => _ouvrirFacture(urlFacture, numeroFacture: numeroFacture) : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
