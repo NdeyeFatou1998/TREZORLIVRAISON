@@ -28,7 +28,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
   bool _obscure = true;
+  bool _otpRequested = false;
+  bool _phoneVerified = false;
+  bool _otpLoading = false;
+  String? _otpToken;
 
   // Étape 2 — docs KYC
   File? _cinRecto;
@@ -44,6 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _prenomCtrl.dispose(); _nomCtrl.dispose();
     _phoneCtrl.dispose(); _emailCtrl.dispose(); _passwordCtrl.dispose();
+    _otpCtrl.dispose();
     _numeroCinCtrl.dispose();
     super.dispose();
   }
@@ -97,6 +103,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'photoCinVerso': uploads[1],
         'photoSelfie': uploads[2],
         'photoEngin': uploads[3],
+        'otpToken': _otpToken,
       });
 
       if (!mounted) return;
@@ -129,6 +136,67 @@ class _RegisterScreenState extends State<RegisterScreen> {
               backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _requestOtp() async {
+    if (_phoneCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saisissez votre numéro de téléphone'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() {
+      _otpLoading = true;
+      _phoneVerified = false;
+      _otpToken = null;
+    });
+    try {
+      await _authService.requestRegisterOtp(_phoneCtrl.text.trim());
+      if (!mounted) return;
+      setState(() => _otpRequested = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code OTP envoyé par SMS'), backgroundColor: AppColors.success),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _otpLoading = false);
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    if (_otpCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saisissez le code OTP'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _otpLoading = true);
+    try {
+      final token = await _authService.verifyRegisterOtp(_phoneCtrl.text.trim(), _otpCtrl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _otpToken = token;
+        _phoneVerified = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Numéro vérifié avec succès'), backgroundColor: AppColors.success),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phoneVerified = false;
+        _otpToken = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _otpLoading = false);
     }
   }
 
@@ -191,6 +259,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: 14),
       _field(_phoneCtrl, 'Téléphone (ex: 77 123 45 67)', Icons.phone_outlined,
           type: TextInputType.phone),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _otpLoading ? null : _requestOtp,
+              icon: const Icon(Icons.sms_outlined, size: 18),
+              label: const Text('Recevoir OTP'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white30),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_phoneVerified) const Icon(Icons.verified, color: AppColors.success),
+        ],
+      ),
+      if (_otpRequested) ...[
+        const SizedBox(height: 10),
+        _field(_otpCtrl, 'Code OTP', Icons.verified_outlined, type: TextInputType.number),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _otpLoading ? null : _verifyOtp,
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Valider OTP'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 14),
       _field(_emailCtrl, 'Email', Icons.email_outlined, type: TextInputType.emailAddress),
       const SizedBox(height: 14),
@@ -211,6 +314,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _phoneCtrl.text.isEmpty || _emailCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('Tous les champs sont requis'), backgroundColor: Colors.red));
+          return;
+        }
+        if (!_phoneVerified || _otpToken == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vérifiez votre numéro avec le code OTP'), backgroundColor: Colors.red),
+          );
           return;
         }
         setState(() => _step = 2);

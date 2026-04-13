@@ -63,6 +63,38 @@ class AuthService {
     }
   }
 
+  Future<void> requestRegisterOtp(String phone) async {
+    try {
+      final response = await _api.post('/api/livreur/auth/register/request-otp', data: {'phone': phone});
+      if (response.statusCode == 200 && response.data['success'] == true) return;
+      throw Exception(response.data['message'] ?? 'Erreur envoi OTP');
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response?.data['message'] ?? 'Erreur réseau')
+          : (e.message ?? 'Erreur réseau');
+      throw Exception(msg);
+    }
+  }
+
+  Future<String> verifyRegisterOtp(String phone, String otp) async {
+    try {
+      final response = await _api.post('/api/livreur/auth/register/verify-otp', data: {
+        'phone': phone,
+        'otp': otp,
+      });
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'];
+        if (data is Map && data['otpToken'] != null) return data['otpToken'].toString();
+      }
+      throw Exception(response.data['message'] ?? 'OTP invalide');
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response?.data['message'] ?? 'Erreur réseau')
+          : (e.message ?? 'Erreur réseau');
+      throw Exception(msg);
+    }
+  }
+
   // ── LOGOUT ──
 
   Future<void> logout() async {
