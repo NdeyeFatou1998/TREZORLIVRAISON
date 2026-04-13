@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
+import '../conditions_utilisation_screen.dart';
 import 'login_screen.dart';
 
 /// Inscription livreur — 3 étapes :
@@ -25,7 +27,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Étape 1
   final _prenomCtrl = TextEditingController();
   final _nomCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  final _phoneLocalCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
@@ -34,6 +36,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _phoneVerified = false;
   bool _otpLoading = false;
   String? _otpToken;
+  bool _acceptedTerms = false;
+  String _completePhone = '';
+  String? _verifiedPhone;
 
   // Étape 2 — docs KYC
   File? _cinRecto;
@@ -48,10 +53,58 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _prenomCtrl.dispose(); _nomCtrl.dispose();
-    _phoneCtrl.dispose(); _emailCtrl.dispose(); _passwordCtrl.dispose();
+    _phoneLocalCtrl.dispose(); _emailCtrl.dispose(); _passwordCtrl.dispose();
     _otpCtrl.dispose();
     _numeroCinCtrl.dispose();
     super.dispose();
+  }
+
+  bool _isValidEmail(String value) {
+    final s = value.trim();
+    if (s.isEmpty || s.length > 254) return false;
+    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$').hasMatch(s);
+  }
+
+  bool get _hasValidNationalPhone {
+    final local = _phoneLocalCtrl.text.replaceAll(RegExp(r'\s'), '');
+    return local.length >= 7;
+  }
+
+  void _onPhoneChanged(String completeNumber) {
+    if (_verifiedPhone != null && completeNumber != _verifiedPhone) {
+      setState(() {
+        _phoneVerified = false;
+        _otpToken = null;
+        _verifiedPhone = null;
+        _otpRequested = false;
+        _otpCtrl.clear();
+        _completePhone = completeNumber;
+      });
+      return;
+    }
+    setState(() => _completePhone = completeNumber);
+  }
+
+  bool get _canContinueStep1 {
+    if (_prenomCtrl.text.trim().isEmpty || _nomCtrl.text.trim().isEmpty) return false;
+    if (!_isValidEmail(_emailCtrl.text)) return false;
+    if (!_hasValidNationalPhone || _completePhone.length < 10) return false;
+    if (!_phoneVerified || _otpToken == null) return false;
+    if (_verifiedPhone != _completePhone) return false;
+    if (_passwordCtrl.text.isEmpty) return false;
+    if (!_acceptedTerms) return false;
+    return true;
+  }
+
+  bool get _canContinueStep2 {
+    return _numeroCinCtrl.text.trim().isNotEmpty &&
+        _cinRecto != null &&
+        _cinVerso != null &&
+        _selfie != null;
+  }
+
+  bool get _canSubmitFinal {
+    return _canContinueStep1 && _canContinueStep2 && _photoEngin != null;
   }
 
   // ── SÉLECTION IMAGES ──
@@ -74,6 +127,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ── SOUMISSION ──
 
   Future<void> _submit() async {
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vous devez accepter les conditions d\'utilisation'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (_cinRecto == null || _cinVerso == null || _selfie == null || _photoEngin == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Tous les documents sont obligatoires'), backgroundColor: Colors.red));
@@ -94,7 +156,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _authService.register({
         'prenom': _prenomCtrl.text.trim(),
         'nom': _nomCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
+        'phone': _completePhone,
         'email': _emailCtrl.text.trim(),
         'password': _passwordCtrl.text,
         'typeEngin': _typeEngin,
@@ -140,9 +202,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _requestOtp() async {
-    if (_phoneCtrl.text.trim().isEmpty) {
+    if (!_hasValidNationalPhone || _completePhone.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saisissez votre numéro de téléphone'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Choisissez le pays et saisissez le numéro sans indicatif'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -150,9 +215,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _otpLoading = true;
       _phoneVerified = false;
       _otpToken = null;
+      _verifiedPhone = null;
     });
     try {
-      await _authService.requestRegisterOtp(_phoneCtrl.text.trim());
+      await _authService.requestRegisterOtp(_completePhone);
       if (!mounted) return;
       setState(() => _otpRequested = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -177,11 +243,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
     setState(() => _otpLoading = true);
     try {
-      final token = await _authService.verifyRegisterOtp(_phoneCtrl.text.trim(), _otpCtrl.text.trim());
+      final token = await _authService.verifyRegisterOtp(_completePhone, _otpCtrl.text.trim());
       if (!mounted) return;
       setState(() {
         _otpToken = token;
         _phoneVerified = true;
+        _verifiedPhone = _completePhone;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Numéro vérifié avec succès'), backgroundColor: AppColors.success),
@@ -191,6 +258,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _phoneVerified = false;
         _otpToken = null;
+        _verifiedPhone = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
@@ -257,8 +325,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: 14),
       _field(_nomCtrl, 'Nom', Icons.person_outline),
       const SizedBox(height: 14),
-      _field(_phoneCtrl, 'Téléphone (ex: 77 123 45 67)', Icons.phone_outlined,
-          type: TextInputType.phone),
+      const Text(
+        'Téléphone — pays (indicatif) puis numéro local',
+        style: TextStyle(color: Colors.white60, fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: IntlPhoneField(
+          controller: _phoneLocalCtrl,
+          initialCountryCode: 'SN',
+          languageCode: 'fr',
+          disableLengthCheck: false,
+          invalidNumberMessage: 'Numéro invalide',
+          decoration: const InputDecoration(
+            hintText: 'Numéro sans indicatif',
+            hintStyle: TextStyle(color: Colors.white38),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            counterText: '',
+          ),
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+          dropdownTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+          dropdownIcon: Icon(Icons.arrow_drop_down, color: AppColors.gold.withValues(alpha: 0.7)),
+          flagsButtonPadding: const EdgeInsets.only(left: 8),
+          onChanged: (phone) => _onPhoneChanged(phone.completeNumber),
+        ),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'Le code OTP par SMS est valable 5 minutes et ne peut être utilisé qu\'une fois.',
+        style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.3),
+      ),
       const SizedBox(height: 10),
       Row(
         children: [
@@ -299,6 +401,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: 14),
       TextFormField(
         controller: _passwordCtrl,
+        onChanged: (_) => setState(() {}),
         style: const TextStyle(color: Colors.white),
         obscureText: _obscure,
         decoration: _inputDecor('Mot de passe', Icons.lock_outline).copyWith(
@@ -308,22 +411,81 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
-      const SizedBox(height: 32),
-      _nextBtn(() {
-        if (_prenomCtrl.text.isEmpty || _nomCtrl.text.isEmpty ||
-            _phoneCtrl.text.isEmpty || _emailCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Tous les champs sont requis'), backgroundColor: Colors.red));
-          return;
-        }
-        if (!_phoneVerified || _otpToken == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vérifiez votre numéro avec le code OTP'), backgroundColor: Colors.red),
-          );
-          return;
-        }
-        setState(() => _step = 2);
-      }),
+      const SizedBox(height: 20),
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _acceptedTerms
+                ? AppColors.gold.withValues(alpha: 0.45)
+                : Colors.white24,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _acceptedTerms ? Icons.check_circle : Icons.gavel_outlined,
+                  color: _acceptedTerms ? AppColors.gold : Colors.white54,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _acceptedTerms
+                        ? 'Conditions d\'utilisation acceptées.'
+                        : 'Ouvrez la page des conditions (identique au menu Profil), lisez et validez « J\'accepte » pour continuer.',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.white70,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        final accepted = await Navigator.push<bool>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ConditionsUtilisationScreen(),
+                          ),
+                        );
+                        if (accepted == true && mounted) {
+                          setState(() => _acceptedTerms = true);
+                        }
+                      },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.gold,
+                  side: BorderSide(color: AppColors.gold.withValues(alpha: 0.55)),
+                ),
+                child: Text(
+                  _acceptedTerms ? 'Relire les conditions' : 'Lire et accepter les conditions',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 24),
+      _nextBtn(
+        enabled: _canContinueStep1,
+        onTap: () {
+          if (!_canContinueStep1) return;
+          setState(() => _step = 2);
+        },
+      ),
     ]);
   }
 
@@ -348,14 +510,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: 14),
       _docUpload('Selfie avec votre CIN', 'selfie', _selfie, Icons.face),
       const SizedBox(height: 32),
-      _nextBtn(() {
-        if (_numeroCinCtrl.text.isEmpty || _cinRecto == null || _cinVerso == null || _selfie == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Le numéro CIN et les 3 documents sont obligatoires'), backgroundColor: Colors.red));
-          return;
-        }
-        setState(() => _step = 3);
-      }),
+      _nextBtn(
+        enabled: _canContinueStep2,
+        onTap: () {
+          if (!_canContinueStep2) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Le numéro CIN et les 3 documents sont obligatoires'), backgroundColor: Colors.red));
+            return;
+          }
+          setState(() => _step = 3);
+        },
+      ),
     ]);
   }
 
@@ -402,16 +567,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
       SizedBox(
         height: 54,
         child: ElevatedButton(
-          onPressed: _isLoading ? null : _submit,
+          onPressed: (_canSubmitFinal && !_isLoading) ? _submit : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.gold,
             foregroundColor: AppColors.deepPurple,
+            disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
+            disabledForegroundColor: Colors.white38,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           child: _isLoading
               ? const CircularProgressIndicator(color: AppColors.deepPurple)
-              : const Text('Soumettre mon dossier',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              : Text(
+                  'Soumettre mon dossier',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: _canSubmitFinal ? AppColors.deepPurple : Colors.white38,
+                  ),
+                ),
         ),
       ),
     ]);
@@ -426,6 +599,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       {TextInputType type = TextInputType.text}) =>
       TextFormField(
         controller: ctrl,
+        onChanged: (_) => setState(() {}),
         style: const TextStyle(color: Colors.white),
         keyboardType: type,
         decoration: _inputDecor(hint, icon),
@@ -457,17 +631,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _nextBtn(VoidCallback onTap) => SizedBox(
+  Widget _nextBtn({required bool enabled, required VoidCallback onTap}) => SizedBox(
         height: 54,
         child: ElevatedButton(
-          onPressed: onTap,
+          onPressed: enabled ? onTap : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.gold,
             foregroundColor: AppColors.deepPurple,
+            disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
+            disabledForegroundColor: Colors.white38,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
-          child: const Text('Continuer',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          child: Text('Continuer',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: enabled ? AppColors.deepPurple : Colors.white38,
+              )),
         ),
       );
 
