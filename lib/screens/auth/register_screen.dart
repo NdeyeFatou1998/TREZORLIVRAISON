@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../conditions_utilisation_screen.dart';
@@ -26,11 +27,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Étape 1
   final _prenomCtrl = TextEditingController();
   final _nomCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  final _phoneLocalCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
   bool _obscure = true;
   bool _acceptedTerms = false;
+  bool _otpRequested = false;
+  bool _phoneVerified = false;
+  bool _otpLoading = false;
+  String? _otpToken;
+  String? _verifiedPhone;
+  String _completePhone = '';
 
   // Étape 2 — docs KYC
   File? _cinRecto;
@@ -45,7 +53,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _prenomCtrl.dispose(); _nomCtrl.dispose();
-    _phoneCtrl.dispose(); _emailCtrl.dispose(); _passwordCtrl.dispose();
+    _phoneLocalCtrl.dispose(); _emailCtrl.dispose(); _passwordCtrl.dispose();
+    _otpCtrl.dispose();
     _numeroCinCtrl.dispose();
     super.dispose();
   }
@@ -56,18 +65,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+$').hasMatch(s);
   }
 
-  String get _phoneNormalized =>
-      _phoneCtrl.text.replaceAll(RegExp(r'[\s-]'), '');
+  String get _phoneForApi => _completePhone.replaceAll(RegExp(r'\s'), '');
+
+  bool get _hasValidNationalPhone {
+    final local = _phoneLocalCtrl.text.replaceAll(RegExp(r'\s'), '');
+    return local.length >= 7;
+  }
 
   bool get _hasValidPhone {
-    final s = _phoneNormalized;
+    final s = _phoneForApi;
+    if (!_hasValidNationalPhone || s.length < 10) return false;
     return RegExp(r'^\+?[0-9]{8,15}$').hasMatch(s);
+  }
+
+  void _onPhoneChanged(String completeNumber) {
+    if (_verifiedPhone != null && completeNumber != _verifiedPhone) {
+      setState(() {
+        _phoneVerified = false;
+        _otpToken = null;
+        _verifiedPhone = null;
+        _otpRequested = false;
+        _otpCtrl.clear();
+        _completePhone = completeNumber;
+      });
+      return;
+    }
+    setState(() => _completePhone = completeNumber);
   }
 
   bool get _canContinueStep1 {
     if (_prenomCtrl.text.trim().isEmpty || _nomCtrl.text.trim().isEmpty) return false;
     if (!_isValidEmail(_emailCtrl.text)) return false;
     if (!_hasValidPhone) return false;
+    if (!_phoneVerified || _otpToken == null) return false;
+    if (_verifiedPhone != _phoneForApi) return false;
     if (_passwordCtrl.text.isEmpty) return false;
     if (!_acceptedTerms) return false;
     return true;
@@ -133,7 +164,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _authService.register({
         'prenom': _prenomCtrl.text.trim(),
         'nom': _nomCtrl.text.trim(),
-        'phone': _phoneNormalized,
+        'phone': _phoneForApi,
         'email': _emailCtrl.text.trim(),
         'password': _passwordCtrl.text,
         'typeEngin': _typeEngin,
@@ -142,6 +173,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'photoCinVerso': uploads[1],
         'photoSelfie': uploads[2],
         'photoEngin': uploads[3],
+        'otpToken': _otpToken,
       });
 
       if (!mounted) return;
@@ -174,6 +206,70 @@ class _RegisterScreenState extends State<RegisterScreen> {
               backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _requestOtp() async {
+    if (!_hasValidPhone) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Numéro invalide'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() {
+      _otpLoading = true;
+      _phoneVerified = false;
+      _otpToken = null;
+      _verifiedPhone = null;
+    });
+    try {
+      await _authService.requestRegisterOtp(_phoneForApi);
+      if (!mounted) return;
+      setState(() => _otpRequested = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code envoyé sur WhatsApp'), backgroundColor: AppColors.success),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _otpLoading = false);
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    if (_otpCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saisissez le code WhatsApp'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _otpLoading = true);
+    try {
+      final token = await _authService.verifyRegisterOtp(_phoneForApi, _otpCtrl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _otpToken = token;
+        _phoneVerified = true;
+        _verifiedPhone = _phoneForApi;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Numéro vérifié'), backgroundColor: AppColors.success),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phoneVerified = false;
+        _otpToken = null;
+        _verifiedPhone = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _otpLoading = false);
     }
   }
 
@@ -234,13 +330,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
       const SizedBox(height: 14),
       _field(_nomCtrl, 'Nom', Icons.person_outline),
       const SizedBox(height: 14),
-      _field(_phoneCtrl, 'Téléphone (ex. +221771234567)', Icons.phone_android_outlined,
-          type: TextInputType.phone),
+      const Text(
+        'Téléphone — pays (indicatif) puis numéro local',
+        style: TextStyle(color: Colors.white60, fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: IntlPhoneField(
+          controller: _phoneLocalCtrl,
+          initialCountryCode: 'SN',
+          languageCode: 'fr',
+          disableLengthCheck: false,
+          invalidNumberMessage: 'Numéro invalide',
+          decoration: const InputDecoration(
+            hintText: 'Numéro sans indicatif',
+            hintStyle: TextStyle(color: Colors.white38),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            counterText: '',
+          ),
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+          dropdownTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+          dropdownIcon: Icon(Icons.arrow_drop_down, color: AppColors.gold.withValues(alpha: 0.7)),
+          flagsButtonPadding: const EdgeInsets.only(left: 8),
+          onChanged: (phone) => _onPhoneChanged(phone.completeNumber),
+        ),
+      ),
       const SizedBox(height: 6),
       const Text(
-        'Indicatif pays inclus (ex. +221 pour le Sénégal).',
+        'Code à 6 chiffres par WhatsApp (5 min).',
         style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.3),
       ),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _otpLoading ? null : _requestOtp,
+              icon: const Icon(Icons.chat_rounded, size: 18),
+              label: const Text('Code WhatsApp'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white30),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_phoneVerified) const Icon(Icons.verified, color: AppColors.success),
+        ],
+      ),
+      if (_otpRequested) ...[
+        const SizedBox(height: 10),
+        _field(_otpCtrl, 'Code WhatsApp', Icons.verified_outlined, type: TextInputType.number),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _otpLoading ? null : _verifyOtp,
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Valider le code'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 14),
       _field(_emailCtrl, 'Email', Icons.email_outlined, type: TextInputType.emailAddress),
       const SizedBox(height: 14),
