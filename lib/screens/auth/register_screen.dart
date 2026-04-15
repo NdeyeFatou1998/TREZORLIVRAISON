@@ -7,10 +7,11 @@ import '../../services/auth_service.dart';
 import '../conditions_utilisation_screen.dart';
 import 'login_screen.dart';
 
-/// Inscription livreur — 3 étapes :
-/// Étape 1 : Infos personnelles (nom, téléphone, email, mot de passe)
-/// Étape 2 : Documents KYC (CIN recto/verso, selfie avec CIN)
-/// Étape 3 : Engin de livraison (type + photo)
+/// Inscription livreur — 4 étapes :
+/// Étape 1 : Téléphone + OTP WhatsApp (passage auto à l’étape 2 si OK)
+/// Étape 2 : Infos personnelles (nom, email, mot de passe, CGU)
+/// Étape 3 : Documents KYC (CIN recto/verso, selfie avec CIN)
+/// Étape 4 : Engin de livraison (type + photo)
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -24,7 +25,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   int _step = 1;
   bool _isLoading = false;
 
-  // Étape 1
+  static const int _totalSteps = 4;
+
+  // Étape 2 (profil)
   final _prenomCtrl = TextEditingController();
   final _nomCtrl = TextEditingController();
   final _phoneLocalCtrl = TextEditingController();
@@ -40,13 +43,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _verifiedPhone;
   String _completePhone = '';
 
-  // Étape 2 — docs KYC
+  // Étape 3 — docs KYC
   File? _cinRecto;
   File? _cinVerso;
   File? _selfie;
   final _numeroCinCtrl = TextEditingController();
 
-  // Étape 3 — engin
+  // Étape 4 — engin
   String _typeEngin = 'MOTO';
   File? _photoEngin;
 
@@ -93,10 +96,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _completePhone = completeNumber);
   }
 
-  bool get _canContinueStep1 {
+  bool get _canContinueProfile {
     if (_prenomCtrl.text.trim().isEmpty || _nomCtrl.text.trim().isEmpty) return false;
     if (!_isValidEmail(_emailCtrl.text)) return false;
-    if (!_hasValidPhone) return false;
     if (!_phoneVerified || _otpToken == null) return false;
     if (_verifiedPhone != _phoneForApi) return false;
     if (_passwordCtrl.text.isEmpty) return false;
@@ -104,7 +106,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return true;
   }
 
-  bool get _canContinueStep2 {
+  bool get _canContinueKyc {
     return _numeroCinCtrl.text.trim().isNotEmpty &&
         _cinRecto != null &&
         _cinVerso != null &&
@@ -112,7 +114,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   bool get _canSubmitFinal {
-    return _canContinueStep1 && _canContinueStep2 && _photoEngin != null;
+    return _canContinueProfile && _canContinueKyc && _photoEngin != null;
   }
 
   // ── SÉLECTION IMAGES ──
@@ -254,9 +256,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _otpToken = token;
         _phoneVerified = true;
         _verifiedPhone = _phoneForApi;
+        _step = 2;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Numéro vérifié'), backgroundColor: AppColors.success),
+        const SnackBar(content: Text('Numéro vérifié — complétez votre profil'), backgroundColor: AppColors.success),
       );
     } catch (e) {
       if (!mounted) return;
@@ -281,10 +284,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
-        title: Text('Inscription — Étape $_step/3'),
+        title: Text('Inscription — Étape $_step/$_totalSteps'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => _step > 1 ? setState(() => _step--) : Navigator.pop(context),
+          onPressed: () {
+            if (_step > 1) {
+              setState(() => _step--);
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
       ),
       body: SafeArea(
@@ -296,7 +305,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: _step / 3,
+                  value: _step / _totalSteps,
                   backgroundColor: Colors.white12,
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.gold),
                   minHeight: 4,
@@ -310,7 +319,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: _step == 1 ? _buildStep1() : _step == 2 ? _buildStep2() : _buildStep3(),
+                  child: _step == 1
+                      ? _buildStepPhoneOtp()
+                      : _step == 2
+                          ? _buildStepProfile()
+                          : _step == 3
+                              ? _buildStepKyc()
+                              : _buildStepEngin(),
                 ),
               ),
             ),
@@ -320,16 +335,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // ── ÉTAPE 1 : Infos personnelles ──
+  // ── ÉTAPE 1 : Téléphone + OTP ──
 
-  Widget _buildStep1() {
+  Widget _buildStepPhoneOtp() {
     return Column(key: const ValueKey(1), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _sectionTitle('Informations personnelles'),
+      _sectionTitle('Vérifier votre numéro'),
+      const SizedBox(height: 8),
+      const Text(
+        'Étape 1/4 — un code vous est envoyé sur WhatsApp.',
+        style: TextStyle(color: Colors.white60, fontSize: 13),
+      ),
       const SizedBox(height: 20),
-      _field(_prenomCtrl, 'Prénom', Icons.person_outline),
-      const SizedBox(height: 14),
-      _field(_nomCtrl, 'Nom', Icons.person_outline),
-      const SizedBox(height: 14),
       const Text(
         'Téléphone — pays (indicatif) puis numéro local',
         style: TextStyle(color: Colors.white60, fontSize: 12),
@@ -363,7 +379,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       const SizedBox(height: 6),
       const Text(
-        'Code à 6 chiffres par WhatsApp (5 min).',
+        'Code à 6 chiffres par WhatsApp (5 min). Après validation, vous passerez à l’étape suivante.',
         style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.3),
       ),
       const SizedBox(height: 10),
@@ -373,15 +389,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: OutlinedButton.icon(
               onPressed: _otpLoading ? null : _requestOtp,
               icon: const Icon(Icons.chat_rounded, size: 18),
-              label: const Text('Code WhatsApp'),
+              label: const Text('Recevoir le code WhatsApp'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white30),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          if (_phoneVerified) const Icon(Icons.verified, color: AppColors.success),
         ],
       ),
       if (_otpRequested) ...[
@@ -401,6 +415,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ],
+      if (_phoneVerified && _otpToken != null && _verifiedPhone == _phoneForApi) ...[
+        const SizedBox(height: 16),
+        OutlinedButton(
+          onPressed: () => setState(() => _step = 2),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.gold,
+            side: BorderSide(color: AppColors.gold.withValues(alpha: 0.55)),
+            minimumSize: const Size(double.infinity, 48),
+          ),
+          child: const Text('Continuer — numéro déjà vérifié'),
+        ),
+      ],
+    ]);
+  }
+
+  // ── ÉTAPE 2 : Profil ──
+
+  Widget _buildStepProfile() {
+    return Column(key: const ValueKey(2), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _sectionTitle('Informations personnelles'),
+      const SizedBox(height: 8),
+      const Text('Étape 2/4', style: TextStyle(color: Colors.white60, fontSize: 13)),
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_rounded, color: AppColors.success, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Numéro vérifié : $_phoneForApi',
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      _field(_prenomCtrl, 'Prénom', Icons.person_outline),
+      const SizedBox(height: 14),
+      _field(_nomCtrl, 'Nom', Icons.person_outline),
       const SizedBox(height: 14),
       _field(_emailCtrl, 'Email', Icons.email_outlined, type: TextInputType.emailAddress),
       const SizedBox(height: 14),
@@ -485,20 +546,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       const SizedBox(height: 24),
       _nextBtn(
-        enabled: _canContinueStep1,
+        enabled: _canContinueProfile,
         onTap: () {
-          if (!_canContinueStep1) return;
-          setState(() => _step = 2);
+          if (!_canContinueProfile) return;
+          setState(() => _step = 3);
         },
       ),
     ]);
   }
 
-  // ── ÉTAPE 2 : Documents KYC ──
+  // ── ÉTAPE 3 : Documents KYC ──
 
-  Widget _buildStep2() {
-    return Column(key: const ValueKey(2), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+  Widget _buildStepKyc() {
+    return Column(key: const ValueKey(3), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionTitle('Documents d\'identité'),
+      const SizedBox(height: 8),
+      const Text('Étape 3/4', style: TextStyle(color: Colors.white60, fontSize: 13)),
       const SizedBox(height: 8),
       const Text('Ces documents permettent de vérifier votre identité. '
           'Toutes les photos doivent être nettes et lisibles.',
@@ -516,26 +579,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _docUpload('Selfie avec votre CIN', 'selfie', _selfie, Icons.face),
       const SizedBox(height: 32),
       _nextBtn(
-        enabled: _canContinueStep2,
+        enabled: _canContinueKyc,
         onTap: () {
-          if (!_canContinueStep2) {
+          if (!_canContinueKyc) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                 content: Text('Le numéro CIN et les 3 documents sont obligatoires'), backgroundColor: Colors.red));
             return;
           }
-          setState(() => _step = 3);
+          setState(() => _step = 4);
         },
       ),
     ]);
   }
 
-  // ── ÉTAPE 3 : Engin ──
+  // ── ÉTAPE 4 : Engin ──
 
-  Widget _buildStep3() {
+  Widget _buildStepEngin() {
     final engins = ['MOTO', 'VOITURE', 'TRICYCLE'];
-    return Column(key: const ValueKey(3), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    return Column(key: const ValueKey(4), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionTitle('Votre engin de livraison'),
-      const SizedBox(height: 20),
+      const SizedBox(height: 8),
+      const Text('Étape 4/4', style: TextStyle(color: Colors.white60, fontSize: 13)),
+      const SizedBox(height: 12),
 
       // Sélection type engin
       Wrap(
