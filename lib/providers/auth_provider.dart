@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../services/livraison_dashboard_websocket_service.dart';
+import '../services/location_service.dart';
 import '../utils/app_logger.dart';
 
 /// Provider d'authentification du livreur.
@@ -34,6 +35,9 @@ class AuthProvider extends ChangeNotifier {
       await refreshProfile();
       AppLogger.log('[Auth] checkSession: livreur=${_livreur?.fullName ?? "NULL"}');
       _connectDashboardWebSocket();
+      // Envoyer la position dès le démarrage (même sans toggle disponible),
+      // pour que le backend ait une position récente (< 5 min) à l'affectation.
+      _sendPositionAfterLogin();
       return _livreur != null;
     }
     return false;
@@ -81,6 +85,9 @@ class AuthProvider extends ChangeNotifier {
       AppLogger.log('[Auth] login data: photoSelfie=${_livreur?.photoSelfie != null}, numeroCin=${_livreur?.numeroCin}');
       // Recharger le profil complet (essai admin, peutEtreDisponible) — même source que le dashboard
       await refreshProfile();
+      // Envoyer la position immédiatement après login pour que le backend considère le livreur
+      // comme ayant une position récente (< 5 min requise pour l'affectation).
+      _sendPositionAfterLogin();
       await NotificationService().syncFcmTokenToBackendIfLoggedIn();
       _isLoading = false;
       notifyListeners();
@@ -126,5 +133,23 @@ class AuthProvider extends ChangeNotifier {
     final id = _livreur?.id;
     if (id == null || id.isEmpty) return;
     LivraisonDashboardWebSocketService().connect(id);
+  }
+
+  /// Envoie la position GPS immédiatement après login/checkSession,
+  /// sans attendre le heartbeat (qui ne s'active que si disponible=true).
+  /// Indispensable : le backend exige une position < 5 min pour l'affectation.
+  void _sendPositionAfterLogin() {
+    LocationService().getCurrentPosition().then((pos) async {
+      if (pos == null) return;
+      try {
+        await _api.put('/api/livreur/position', data: {
+          'latitude': pos.latitude,
+          'longitude': pos.longitude,
+        });
+        AppLogger.log('[Auth] Position envoyée après login: ${pos.latitude}, ${pos.longitude}');
+      } catch (e) {
+        AppLogger.error('[Auth] Erreur envoi position post-login', e);
+      }
+    });
   }
 }
