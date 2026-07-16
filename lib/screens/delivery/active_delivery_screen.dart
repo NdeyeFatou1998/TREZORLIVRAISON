@@ -14,6 +14,7 @@ import '../../services/livraison_service.dart';
 import '../../services/location_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/directions_service.dart';
+import '../../utils/api_error.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// ÉCRAN DE LIVRAISON ACTIVE — cœur de l'app Trezor Livraison
@@ -445,7 +446,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         );
       }
     } catch (e) {
-      _showSnack(e.toString().replaceFirst('Exception: ', ''), Colors.red);
+      _showSnack(ApiError.messageOf(e), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -502,7 +503,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         setState(() => _showValidationPanel = false);
       }
     } catch (e) {
-      _showSnack(e.toString().replaceFirst('Exception: ', ''), Colors.red);
+      _showSnack(ApiError.messageOf(e), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -572,7 +573,7 @@ class _ActiveDeliveryScreenState extends State<ActiveDeliveryScreen> {
         setState(() => _showValidationPanel = false);
       }
     } catch (e) {
-      _showSnack(e.toString().replaceFirst('Exception: ', ''), Colors.red);
+      _showSnack(ApiError.messageOf(e), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

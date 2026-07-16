@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/livreur.dart';
+import '../utils/api_error.dart';
 import '../utils/app_logger.dart';
 import 'api_client.dart';
 
@@ -36,12 +37,9 @@ class AuthService {
         await saveToken(token);
         return LivreurModel.fromJson(data['livreur'] as Map<String, dynamic>);
       }
-      throw Exception(response.data['message'] ?? 'Erreur connexion');
+      throw ApiError.fromResponseBody(response.data, statusCode: response.statusCode);
     } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response?.data['message'] ?? 'Erreur réseau')
-          : (e.message ?? 'Erreur réseau');
-      throw Exception(msg);
+      throw ApiError.fromDio(e);
     }
   }
 
@@ -54,12 +52,9 @@ class AuthService {
       if (response.statusCode == 200 && response.data['success'] == true) {
         return response.data['data'] as Map<String, dynamic>;
       }
-      throw Exception(response.data['message'] ?? 'Erreur inscription');
+      throw ApiError.fromResponseBody(response.data, statusCode: response.statusCode);
     } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response?.data['message'] ?? 'Erreur réseau')
-          : (e.message ?? 'Erreur réseau');
-      throw Exception(msg);
+      throw ApiError.fromDio(e);
     }
   }
 
@@ -67,12 +62,9 @@ class AuthService {
     try {
       final response = await _api.post('/api/livreur/auth/register/request-otp', data: {'phone': phone});
       if (response.statusCode == 200 && response.data['success'] == true) return;
-      throw Exception(response.data['message'] ?? 'Erreur envoi code');
+      throw ApiError.fromResponseBody(response.data, statusCode: response.statusCode);
     } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response?.data['message'] ?? 'Erreur réseau')
-          : (e.message ?? 'Erreur réseau');
-      throw Exception(msg);
+      throw ApiError.fromDio(e);
     }
   }
 
@@ -86,12 +78,9 @@ class AuthService {
         final data = response.data['data'];
         if (data is Map && data['otpToken'] != null) return data['otpToken'].toString();
       }
-      throw Exception(response.data['message'] ?? 'Code invalide');
+      throw ApiError.fromResponseBody(response.data, statusCode: response.statusCode);
     } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response?.data['message'] ?? 'Erreur réseau')
-          : (e.message ?? 'Erreur réseau');
-      throw Exception(msg);
+      throw ApiError.fromDio(e);
     }
   }
 
@@ -109,18 +98,19 @@ class AuthService {
   Future<String> uploadDoc(String filePath, String docType) async {
     try {
       final file = await MultipartFile.fromFile(filePath);
-      // docType = 'cin_recto', 'cin_verso', 'selfie', 'engin' (pour info backend si besoin)
-      // type = 'image' pour Cloudinary (obligatoire: 'image' ou 'video')
       final formData = FormData.fromMap({
         'file': file,
-        'type': 'image',  // Cloudinary type: 'image' ou 'video'
-        'docType': docType, // Type de document KYC (optionnel pour info)
+        'type': 'image',
+        'docType': docType,
       });
       final response = await _api.uploadFile('/api/files/upload', formData);
       if (response.statusCode == 200 && response.data['success'] == true) {
         return response.data['data']['url'] as String;
       }
-      throw Exception('Erreur upload fichier');
+      throw ApiError.fromResponseBody(response.data, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      AppLogger.error('[Auth] Erreur upload doc', e);
+      throw ApiError.fromDio(e);
     } catch (e) {
       AppLogger.error('[Auth] Erreur upload doc', e);
       rethrow;

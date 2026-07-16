@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../theme/app_theme.dart';
 import '../../services/api_client.dart';
 import '../../widgets/facture_viewer_dialog.dart';
+import '../../utils/api_error.dart';
 
 /// Écran Historique de paiements d'abonnement.
 /// Affiche la liste des paiements avec statut, date, montant et lien facture PDF.
@@ -37,7 +38,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         _paiements = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _error = ApiError.messageOf(e);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

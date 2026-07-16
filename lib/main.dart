@@ -13,8 +13,16 @@ import 'services/notification_service.dart';
 /// Charge les variables d'environnement (.env) puis lance l'app.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Release : --dart-define. Local : .env optionnel (jamais embarqué dans l'APK).
+  try {
+    await dotenv.load(fileName: '.env', isOptional: true);
+  } catch (_) {}
+  // Protection contre la double initialisation (handler background peut déjà l'avoir initialisé).
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (_) {
+    // Firebase déjà initialisé — ignoré intentionnellement.
+  }
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const TrezorLivraisonApp());
 }

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/app_config.dart';
 import '../utils/app_logger.dart';
 
 /// Client HTTP centralisé pour toutes les requêtes API Trezor Backend.
@@ -10,7 +10,7 @@ class ApiClient {
   factory ApiClient() => _instance;
   ApiClient._internal();
 
-  static String get baseUrl => dotenv.env['API_BASE_URL'] ?? 'https://trezorbackend-production.up.railway.app';
+  static String get baseUrl => AppConfig.apiBaseUrl;
 
   final _storage = const FlutterSecureStorage();
   late final Dio _dio;
@@ -44,9 +44,9 @@ class ApiClient {
     _initialized = true;
   }
 
-  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) async {
+  Future<Response> get(String path, {Map<String, dynamic>? queryParameters, Options? options}) async {
     await init();
-    return _dio.get(path, queryParameters: queryParameters);
+    return _dio.get(path, queryParameters: queryParameters, options: options);
   }
 
   Future<Response> post(String path, {dynamic data}) async {

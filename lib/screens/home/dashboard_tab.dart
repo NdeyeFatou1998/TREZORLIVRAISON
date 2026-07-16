@@ -8,6 +8,7 @@ import '../../services/livraison_service.dart';
 import '../../services/api_client.dart';
 import '../../services/livraison_dashboard_websocket_service.dart';
 import '../delivery/active_delivery_screen.dart';
+import '../../utils/api_error.dart';
 
 /// Onglet Dashboard — aperçu des livraisons actives + toggle disponibilité.
 class DashboardTab extends StatefulWidget {
@@ -65,7 +66,17 @@ class DashboardTabState extends State<DashboardTab> {
 
   Future<void> _loadActives() async {
     setState(() => _isLoading = true);
-    _actives = await _livraisonService.getLivraisonsActives();
+    try {
+      _actives = await _livraisonService.getLivraisonsActives();
+    } catch (e) {
+      _actives = [];
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiError.messageOf(e)),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -99,7 +110,7 @@ class DashboardTabState extends State<DashboardTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+        SnackBar(content: Text(ApiError.messageOf(e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _assigningByCode = false);
@@ -136,7 +147,7 @@ class DashboardTabState extends State<DashboardTab> {
       if (mounted) {
         setState(() => _localDisponible = ancienEtat);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          content: Text(ApiError.messageOf(e)),
           backgroundColor: Colors.red,
         ));
       }
@@ -483,7 +494,7 @@ class DashboardTabState extends State<DashboardTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            content: Text(ApiError.messageOf(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -509,7 +520,7 @@ class DashboardTabState extends State<DashboardTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            content: Text(ApiError.messageOf(e)),
             backgroundColor: Colors.red,
           ),
         );

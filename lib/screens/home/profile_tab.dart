@@ -9,6 +9,7 @@ import '../auth/login_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../profile/payment_history_screen.dart';
 import '../../constants/paytech_payment_methods.dart';
+import '../../utils/api_error.dart';
 
 /// Onglet Profil — photo + nom, statut, abonnement, boutons actions.
 class ProfileTab extends StatefulWidget {
@@ -115,7 +116,7 @@ class _ProfileTabState extends State<ProfileTab> with WidgetsBindingObserver {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        content: Text(ApiError.messageOf(e)),
         backgroundColor: Colors.red,
       ));
     } finally {

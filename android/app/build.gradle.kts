@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.iris.trezorlivraison"
+    namespace = "com.trezor.trezorlivraison"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -25,13 +25,24 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.iris.trezorlivraison"
+        applicationId = "com.trezor.trezorlivraison"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Clé Maps : android/local.properties → GOOGLE_MAPS_API_KEY=...
+        val localProps = java.util.Properties()
+        val localFile = rootProject.file("local.properties")
+        if (localFile.exists()) {
+            localFile.inputStream().use { localProps.load(it) }
+        }
+        val mapsKey = localProps.getProperty("GOOGLE_MAPS_API_KEY")
+            ?: localProps.getProperty("GOOGLE_GEOLOCATION_API_KEY")
+            ?: ""
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsKey
     }
 
     buildTypes {

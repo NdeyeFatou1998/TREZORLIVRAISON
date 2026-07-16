@@ -17,10 +17,10 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Clé API Google Maps — utilisée pour la carte et le geocoding -->
+        <!-- Clé API Google Maps — injectée via android/local.properties (GOOGLE_MAPS_API_KEY) -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAOaB0JijLIAlhZiIvB72a9QVxt_oIMi9g"/>
+            android:value="${GOOGLE_MAPS_API_KEY}"/>
 
         <activity
             android:name=".MainActivity"

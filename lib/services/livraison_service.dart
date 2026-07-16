@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/livraison.dart';
+import '../utils/api_error.dart';
 import '../utils/app_logger.dart';
 import 'api_client.dart';
 
@@ -21,8 +22,15 @@ class LivraisonService {
         final list = r.data['data'] as List<dynamic>;
         return list.map((e) => LivraisonModel.fromJson(e as Map<String, dynamic>)).toList();
       }
-    } catch (e) { AppLogger.error('[Livraison] getLivraisonsDisponibles', e); }
-    return [];
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
+    } on ApiError {
+      rethrow;
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    } catch (e) {
+      AppLogger.error('[Livraison] getLivraisonsDisponibles', e);
+      throw ApiError(message: ApiError.messageOf(e));
+    }
   }
 
   Future<List<LivraisonModel>> getLivraisonsActives() async {
@@ -42,8 +50,15 @@ class LivraisonService {
         }
         return out;
       }
-    } catch (e) { AppLogger.error('[Livraison] getLivraisonsActives', e); }
-    return [];
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
+    } on ApiError {
+      rethrow;
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    } catch (e) {
+      AppLogger.error('[Livraison] getLivraisonsActives', e);
+      throw ApiError(message: ApiError.messageOf(e));
+    }
   }
 
   Future<List<LivraisonModel>> getHistorique() async {
@@ -53,8 +68,15 @@ class LivraisonService {
         final list = r.data['data'] as List<dynamic>;
         return list.map((e) => LivraisonModel.fromJson(e as Map<String, dynamic>)).toList();
       }
-    } catch (e) { AppLogger.error('[Livraison] getHistorique', e); }
-    return [];
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
+    } on ApiError {
+      rethrow;
+    } on DioException catch (e) {
+      throw ApiError.fromDio(e);
+    } catch (e) {
+      AppLogger.error('[Livraison] getHistorique', e);
+      throw ApiError(message: ApiError.messageOf(e));
+    }
   }
 
   // ── SUIVI TEMPS RÉEL ──
@@ -65,8 +87,11 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
-    } catch (e) { AppLogger.error('[Livraison] getSuivi', e); }
-    return null;
+      return null;
+    } on DioException catch (e) {
+      AppLogger.error('[Livraison] getSuivi', e);
+      throw ApiError.fromDio(e);
+    }
   }
 
   // ── ACTIONS LIVREUR ──
@@ -77,10 +102,10 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 
   Future<LivraisonModel?> assignerParCode(String codeLivraison) async {
@@ -91,10 +116,10 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 
   Future<LivraisonModel?> refuser(String livraisonId, {String? motif}) async {
@@ -106,10 +131,10 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 
   Future<LivraisonModel?> marquerEnRouteCollecte(String livraisonId) async {
@@ -134,7 +159,9 @@ class LivraisonService {
         body['heading'] = heading;
       }
       await _api.put('/api/livreur/livraisons/$livraisonId/position', data: body);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.error('[Livraison] updatePosition', e);
+    }
   }
 
   // ── VALIDATION ──
@@ -151,10 +178,10 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'QR invalide');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 
   Future<LivraisonModel?> validerParOtp(
@@ -169,10 +196,10 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'OTP invalide');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 
   // ── HELPERS ──
@@ -183,9 +210,9 @@ class LivraisonService {
       if (r.statusCode == 200 && r.data['success'] == true) {
         return LivraisonModel.fromJson(r.data['data'] as Map<String, dynamic>);
       }
+      throw ApiError.fromResponseBody(r.data, statusCode: r.statusCode);
     } on DioException catch (e) {
-      throw Exception(e.response?.data is Map ? e.response?.data['message'] : 'Erreur');
+      throw ApiError.fromDio(e);
     }
-    return null;
   }
 }

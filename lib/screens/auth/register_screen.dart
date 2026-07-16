@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../conditions_utilisation_screen.dart';
 import 'login_screen.dart';
+import '../../utils/api_error.dart';
 
 /// Inscription livreur — 4 étapes :
 /// Étape 1 : Téléphone + OTP WhatsApp (passage auto à l’étape 2 si OK)
@@ -204,7 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: ${e.toString().replaceFirst('Exception: ', '')}'),
+          SnackBar(content: Text('Erreur: ${ApiError.messageOf(e)}'),
               backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -234,7 +235,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+        SnackBar(content: Text(ApiError.messageOf(e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _otpLoading = false);
@@ -269,7 +270,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _verifiedPhone = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
+        SnackBar(content: Text(ApiError.messageOf(e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _otpLoading = false);

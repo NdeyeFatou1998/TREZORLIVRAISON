@@ -7,6 +7,7 @@ import '../services/notification_service.dart';
 import '../services/livraison_dashboard_websocket_service.dart';
 import '../services/location_service.dart';
 import '../utils/app_logger.dart';
+import '../utils/api_error.dart';
 
 /// Provider d'authentification du livreur.
 /// Centralise l'état de connexion accessible dans toute l'app.
@@ -93,7 +94,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _error = ApiError.messageOf(e);
       AppLogger.error('[Auth] login ERREUR', _error);
       _isLoading = false;
       notifyListeners();

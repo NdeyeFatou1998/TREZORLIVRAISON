@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_theme.dart';
 import '../../models/livraison.dart';
 import '../../services/livraison_service.dart';
+import '../../utils/api_error.dart';
 
 /// Onglet Historique — toutes les livraisons terminées du livreur.
 class HistoryTab extends StatefulWidget {
@@ -16,6 +17,7 @@ class HistoryTabState extends State<HistoryTab> {
   final LivraisonService _service = LivraisonService();
   List<LivraisonModel> _historique = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -27,8 +29,22 @@ class HistoryTabState extends State<HistoryTab> {
   Future<void> refreshHistory() => _load();
 
   Future<void> _load() async {
-    setState(() => _isLoading = true);
-    _historique = await _service.getHistorique();
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      _historique = await _service.getHistorique();
+    } catch (e) {
+      _historique = [];
+      _loadError = ApiError.messageOf(e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_loadError!),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
     if (mounted) setState(() => _isLoading = false);
   }
 

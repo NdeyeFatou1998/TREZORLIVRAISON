@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../config/app_config.dart';
 
 /// Résultat d'un appel [Directions API] (itinéraire routier + métadonnées).
 class DirectionsRouteData {
@@ -32,11 +32,8 @@ class DirectionsService {
   ));
 
   static String? get _apiKey {
-    final a = dotenv.env['GOOGLE_MAPS_API_KEY']?.trim();
-    if (a != null && a.isNotEmpty) return a;
-    final b = dotenv.env['GOOGLE_GEOLOCATION_API_KEY']?.trim();
-    if (b != null && b.isNotEmpty) return b;
-    return null;
+    final k = AppConfig.googleMapsApiKey;
+    return k.isEmpty ? null : k;
   }
 
   static String _stripHtml(String s) {
@@ -54,7 +51,8 @@ class DirectionsService {
     if (key == null || key.isEmpty) {
       return const DirectionsRouteData(
         points: [],
-        errorMessage: 'Clé API Google absente (GOOGLE_MAPS_API_KEY ou GOOGLE_GEOLOCATION_API_KEY dans .env)',
+        errorMessage:
+            'Clé API Google absente (--dart-define=GOOGLE_MAPS_API_KEY ou .env local)',
       );
     }
 

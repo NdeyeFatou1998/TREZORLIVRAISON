@@ -7,6 +7,7 @@ import '../../services/livraison_service.dart';
 import '../../services/livraison_dashboard_websocket_service.dart';
 import '../../providers/auth_provider.dart';
 import '../delivery/active_delivery_screen.dart';
+import '../../utils/api_error.dart';
 
 /// Onglet Disponibles — liste des livraisons sans livreur assigné.
 /// Le livreur peut accepter une livraison en appuyant dessus.
@@ -56,7 +57,17 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-    _livraisons = await _service.getLivraisonsDisponibles();
+    try {
+      _livraisons = await _service.getLivraisonsDisponibles();
+    } catch (e) {
+      _livraisons = [];
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiError.messageOf(e)),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -76,7 +87,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          content: Text(ApiError.messageOf(e)),
           backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _accepting = null);
@@ -95,7 +106,7 @@ class _AvailableDeliveriesTabState extends State<AvailableDeliveriesTab> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          content: Text(ApiError.messageOf(e)),
           backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _refusing = null);
