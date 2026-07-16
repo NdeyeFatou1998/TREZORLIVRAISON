@@ -1,4 +1,4 @@
-package com.iris.trezorlivraison
+package com.trezor.trezorlivraison
 
 import io.flutter.embedding.android.FlutterActivity
 
